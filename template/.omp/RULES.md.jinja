@@ -27,6 +27,12 @@
 
 ## Constraints
 
-- 本项目默认不包含数据库、缓存、任务队列或智能体能力。
+[% if database == "none" %]
+- 本项目不包含数据库、缓存、任务队列或智能体能力。
+[% else %]
+- PostgreSQL 持久化使用 [[ orm ]]；变更 model 时同步新增 Alembic migration。
+- 业务调用保持 `route -> service -> repository -> async database` 分层。
+- repository 只执行 `flush()` / `refresh()`；`app/db/session.py` 独占 `commit()` / `rollback()`。
+[% endif %]
 - 不要引入未明确要求的第三方依赖。
 - 所有 I/O 操作使用 async。

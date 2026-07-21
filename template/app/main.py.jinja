@@ -9,13 +9,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.exception_handlers import register_exception_handlers
 from app.api.router import router
 from app.core.config import Settings
-
+[% if database == "postgresql" %]from app.db.session import database
+[% endif %]
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Initialize and tear down shared resources."""
-    yield
-
+    try:
+        yield
+    finally:
+[% if database == "postgresql" %]        await database.close()
+[% else %]        pass
+[% endif %]
 
 app = FastAPI(
     title="[[ project_name ]]",
@@ -43,4 +48,7 @@ async def liveness() -> dict[str, str]:
 
 @app.get("/health/ready")
 async def readiness() -> dict[str, str]:
+[% if database == "postgresql" %]
+    await database.check_connection()
+[% endif %]
     return {"status": "ready"}

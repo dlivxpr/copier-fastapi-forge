@@ -14,3 +14,6 @@ class Settings(BaseSettings):
     cors_origins: str = "*"
     host: str = "0.0.0.0"
     port: int = 8000
+[% if database == "postgresql" %]
+    database_url: str = "postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/app"
+[% endif -%]

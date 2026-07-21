@@ -42,14 +42,20 @@ def test_copier_public_api_renders_default_root_service(tmp_path: Path) -> None:
     forbidden_paths = [
         "alembic.ini",
         "app/db",
+        "app/api/resources.py",
         "app/repositories",
+        "app/models",
         "app/agents",
         "app/tasks",
+        "app/schemas",
+        "app/services",
+        "compose.yaml",
         "deploy/postgres",
         "deploy/redis",
         "frontend",
     ]
     assert not [path for path in forbidden_paths if (project / path).exists()]
+    assert "DATABASE_URL" not in (project / ".env.example").read_text(encoding="utf-8")
 
     raw_deps = project_metadata(project)["dependencies"]
     deps: list[str] = cast("list[str]", raw_deps)
@@ -67,6 +73,46 @@ def test_copier_public_api_renders_default_root_service(tmp_path: Path) -> None:
     assert forbidden_dependencies.isdisjoint(
         dep.partition(">=")[0].partition("[")[0] for dep in deps
     )
+
+
+@pytest.mark.parametrize(
+    ("orm", "expected_dependency"),
+    [
+        (None, "sqlalchemy"),
+        ("sqlalchemy", "sqlalchemy"),
+        ("sqlmodel", "sqlmodel"),
+    ],
+)
+def test_postgresql_renders_selected_orm_slice(
+    tmp_path: Path, orm: str | None, expected_dependency: str
+) -> None:
+    data: dict[str, object] = {"database": "postgresql"}
+    if orm is not None:
+        data["orm"] = orm
+    project = render_project(
+        tmp_path / f"postgresql-{orm or 'default'}",
+        data=data,
+    )
+
+    expected_paths = [
+        "alembic.ini",
+        "alembic/env.py",
+        "alembic/versions/0001_create_resources.py",
+        "app/db/session.py",
+        "app/models/resource.py",
+        "app/repositories/resource.py",
+        "app/schemas/resource.py",
+        "app/services/resource.py",
+        "compose.yaml",
+    ]
+    assert not [path for path in expected_paths if not (project / path).is_file()]
+
+    raw_deps = project_metadata(project)["dependencies"]
+    deps: list[str] = cast("list[str]", raw_deps)
+    dependency_names = {dep.partition(">=")[0].partition("[")[0] for dep in deps}
+    assert {"alembic", "asyncpg", expected_dependency} <= dependency_names
+    other_orm = "sqlmodel" if expected_dependency == "sqlalchemy" else "sqlalchemy"
+    assert other_orm not in dependency_names
 
 
 @pytest.mark.parametrize(

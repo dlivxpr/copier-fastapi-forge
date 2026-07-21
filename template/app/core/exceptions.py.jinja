@@ -22,6 +22,24 @@ class NotFoundError(DomainError):
         )
 
 
+class ConflictError(DomainError):
+    def __init__(self, resource: str, field: str) -> None:
+        super().__init__(
+            code="CONFLICT",
+            message=f"{resource} already exists",
+            details={"resource": resource, "field": field},
+        )
+
+
+class PersistenceError(DomainError):
+    def __init__(self, resource: str) -> None:
+        super().__init__(
+            code="PERSISTENCE_ERROR",
+            message=f"Could not persist {resource}",
+            details={"resource": resource},
+        )
+
+
 class UnauthorizedError(DomainError):
     def __init__(self, message: str = "Unauthorized") -> None:
         super().__init__(code="UNAUTHORIZED", message=message)

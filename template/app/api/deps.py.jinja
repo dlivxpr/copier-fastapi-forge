@@ -1,12 +1,18 @@
 from __future__ import annotations
 
-from typing import Annotated
+[% if database == "postgresql" %]from collections.abc import AsyncIterator
+[% endif %]from typing import Annotated
 
 from fastapi import Depends, Header
-
+[% if database == "postgresql" %][% if orm == "sqlalchemy" %]from sqlalchemy.ext.asyncio import AsyncSession
+[% else %]from sqlmodel.ext.asyncio.session import AsyncSession
+[% endif %][% endif %]
 from app.core.config import Settings
 from app.core.exceptions import UnauthorizedError
-
+[% if database == "postgresql" %]from app.db.session import database
+from app.repositories.resource import ResourceRepository
+from app.services.resource import ResourceService
+[% endif %]
 
 def _get_settings() -> Settings:
     return Settings()
@@ -24,3 +30,19 @@ def _verify_api_key(
 
 
 RequireApiKey = Depends(_verify_api_key)
+[% if database == "postgresql" %]
+
+async def get_session() -> AsyncIterator[AsyncSession]:
+    async with database.session() as session:
+        yield session
+
+
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+
+def get_resource_service(session: SessionDep) -> ResourceService:
+    return ResourceService(ResourceRepository(session))
+
+
+ResourceServiceDep = Annotated[ResourceService, Depends(get_resource_service)]
+[% endif -%]

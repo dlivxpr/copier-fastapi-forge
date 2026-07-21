@@ -1,0 +1,60 @@
+from __future__ import annotations
+
+from uuid import UUID
+
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+
+from app.core.exceptions import ConflictError, NotFoundError, PersistenceError
+from app.models.resource import Resource
+from app.repositories.resource import ResourceRepository
+from app.schemas.resource import ResourceCreate, ResourceUpdate
+
+
+class ResourceService:
+    def __init__(self, repository: ResourceRepository) -> None:
+        self.repository = repository
+
+    async def create(self, payload: ResourceCreate) -> Resource:
+        try:
+            return await self.repository.create(
+                name=payload.name,
+                description=payload.description,
+            )
+        except IntegrityError as exc:
+            raise ConflictError(resource="Resource", field="name") from exc
+        except SQLAlchemyError as exc:
+            raise PersistenceError(resource="Resource") from exc
+
+    async def get(self, resource_id: UUID) -> Resource:
+        try:
+            resource = await self.repository.get(resource_id)
+        except SQLAlchemyError as exc:
+            raise PersistenceError(resource="Resource") from exc
+        if resource is None:
+            raise NotFoundError(resource="Resource", identifier=str(resource_id))
+        return resource
+
+    async def list_resources(self, *, offset: int, limit: int) -> tuple[list[Resource], int]:
+        try:
+            return await self.repository.list_resources(offset=offset, limit=limit)
+        except SQLAlchemyError as exc:
+            raise PersistenceError(resource="Resource") from exc
+
+    async def update(self, resource_id: UUID, payload: ResourceUpdate) -> Resource:
+        resource = await self.get(resource_id)
+        try:
+            return await self.repository.update(
+                resource,
+                payload.model_dump(exclude_unset=True),
+            )
+        except IntegrityError as exc:
+            raise ConflictError(resource="Resource", field="name") from exc
+        except SQLAlchemyError as exc:
+            raise PersistenceError(resource="Resource") from exc
+
+    async def delete(self, resource_id: UUID) -> None:
+        resource = await self.get(resource_id)
+        try:
+            await self.repository.delete(resource)
+        except SQLAlchemyError as exc:
+            raise PersistenceError(resource="Resource") from exc

@@ -1,17 +1,31 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 import pytest
 from httpx import ASGITransport, AsyncClient
+[% if database == "postgresql" %]from sqlalchemy import delete
 
+from app.db.session import database
+from app.models.resource import Resource
+[% endif %]
 
 @pytest.fixture
-async def client() -> AsyncClient:
+async def client() -> AsyncIterator[AsyncClient]:
     from app.main import app
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
-        yield c
+    async with app.router.lifespan_context(app):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
+            yield c
+[% if database == "postgresql" %]
 
+@pytest.fixture(autouse=True)
+async def clean_database() -> None:
+    async with database.session() as session:
+[% if orm == "sqlalchemy" %]        await session.execute(delete(Resource))
+[% else %]        await session.exec(delete(Resource))
+[% endif %][% endif %]
 
 @pytest.fixture
 def valid_key() -> str:

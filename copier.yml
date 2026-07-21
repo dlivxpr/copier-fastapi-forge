@@ -34,6 +34,23 @@ python_version:
   help: Minimum Python version
   default: "3.11"
 
+database:
+  type: str
+  help: Persistence backend
+  choices:
+    No database: none
+    PostgreSQL: postgresql
+  default: none
+
+orm:
+  type: str
+  help: PostgreSQL ORM
+  choices:
+    SQLAlchemy: sqlalchemy
+    SQLModel: sqlmodel
+  default: sqlalchemy
+  when: "[[ database == 'postgresql' ]]"
+
 deployment_api_key:
   type: str
   secret: true
