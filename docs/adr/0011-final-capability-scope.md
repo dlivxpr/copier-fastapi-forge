@@ -11,11 +11,17 @@
 - **限流：保留，可选，默认关闭。**
   内存/Redis 两种存储，不依赖已删除模块。
 
-- **文件存储：保留，可选，默认关闭。**
-  基础文件上传与检索，对算法服务输入和 Agent 附件都有价值。
+- **文件存储：删除。**
+  V1 没有已确认的文件消费场景；不生成本地文件 API、对象存储后端或 Agent 附件集成。
 
-- **Webhooks：保留，可选，默认关闭。**
-  主动外部调用 infrastructure，不依赖已删除模块。
+- **Webhooks：删除。**
+  V1 没有已确认的业务事件；不生成投递基础设施、订阅资源或外部调用配置。
+
+- **Legacy 业务产品能力：删除。**
+  不生成 teams、billing、email、newsletter、contact、Slack/Telegram channels 或 message ratings。
+
+- **生成应用通用 CLI：删除。**
+  V1 没有已确认的独立运维命令用例，不把 legacy CLI 命令面迁入生成项目。
 
 - **分页：始终生成，移除 Copier 选项。**
   零成本 helper，不需要提问。

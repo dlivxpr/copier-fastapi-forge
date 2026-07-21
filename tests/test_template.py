@@ -1,0 +1,149 @@
+from __future__ import annotations
+
+import shutil
+import subprocess
+import sys
+import tomllib
+from pathlib import Path
+
+import pytest
+from copier import run_copy
+
+TEMPLATE_ROOT = Path(__file__).parents[1]
+UV = shutil.which("uv")
+
+
+def render_project(destination: Path, data: dict[str, object] | None = None) -> Path:
+    run_copy(
+        str(TEMPLATE_ROOT),
+        destination,
+        data=data,
+        defaults=True,
+        unsafe=False,
+    )
+    return destination
+
+
+def project_metadata(project: Path) -> dict[str, object]:
+    return tomllib.loads((project / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+
+
+def test_copier_public_api_renders_default_root_service(tmp_path: Path) -> None:
+    project = render_project(tmp_path / "service")
+
+    assert project_metadata(project)["name"] == "fastapi_service"
+    assert (project / "app" / "main.py").is_file()
+    assert (project / "tests" / "test_api.py").is_file()
+    assert (project / "AGENTS.md").is_file()
+    assert (project / ".omp" / "RULES.md").is_file()
+
+    forbidden_paths = [
+        "alembic.ini",
+        "app/db",
+        "app/repositories",
+        "app/agents",
+        "app/tasks",
+        "deploy/postgres",
+        "deploy/redis",
+        "frontend",
+    ]
+    assert not [path for path in forbidden_paths if (project / path).exists()]
+
+    dependencies = project_metadata(project)["dependencies"]
+    forbidden_dependencies = {
+        "alembic",
+        "asyncpg",
+        "fastapi-cache2",
+        "logfire",
+        "pydantic-ai",
+        "redis",
+        "sqlalchemy",
+        "sqlmodel",
+        "taskiq",
+    }
+    assert forbidden_dependencies.isdisjoint(
+        dependency.partition(">=")[0].partition("[")[0] for dependency in dependencies
+    )
+
+
+@pytest.mark.parametrize(
+    ("arguments", "data_file", "expected_name"),
+    [
+        (
+            (
+                "--defaults",
+                "--data",
+                "project_name=CLI Service",
+                "--data",
+                "project_slug=cli-service",
+            ),
+            None,
+            "cli_service",
+        ),
+        (
+            ("--defaults",),
+            "project_name: Data Service\nproject_slug: data-service\n",
+            "data_service",
+        ),
+    ],
+    ids=["command-line-data", "data-file"],
+)
+def test_copier_cli_accepts_automation_inputs(
+    tmp_path: Path,
+    arguments: tuple[str, ...],
+    data_file: str | None,
+    expected_name: str,
+) -> None:
+    destination = tmp_path / expected_name
+    command = [sys.executable, "-m", "copier", "copy", *arguments]
+    if data_file is not None:
+        answers = tmp_path / "answers.yml"
+        answers.write_text(data_file, encoding="utf-8")
+        command.extend(("--data-file", str(answers)))
+    command.extend((str(TEMPLATE_ROOT), str(destination)))
+
+    subprocess.run(command, check=True, text=True, capture_output=True)
+
+    assert project_metadata(destination)["name"] == expected_name
+
+
+@pytest.mark.skipif(UV is None, reason="uv is required for generated-project acceptance")
+def test_default_project_installs_and_passes_runtime_contract(tmp_path: Path) -> None:
+    import os as _os
+
+    project = render_project(tmp_path / "runtime-service")
+    clean_env = {k: v for k, v in _os.environ.items() if k != "VIRTUAL_ENV"}
+
+    subprocess.run(
+        [UV, "sync", "--all-groups"],
+        cwd=project,
+        env=clean_env,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    python_exe = project / ".venv" / "Scripts" / "python.exe"
+
+    lint = subprocess.run(
+        [str(python_exe), "-m", "ruff", "check", "."],
+        cwd=project,
+        text=True,
+        capture_output=True,
+    )
+    assert lint.returncode == 0, f"ruff check failed:\n{lint.stdout}\n{lint.stderr}"
+
+    fmt = subprocess.run(
+        [str(python_exe), "-m", "ruff", "format", "--check", "."],
+        cwd=project,
+        text=True,
+        capture_output=True,
+    )
+    assert fmt.returncode == 0, f"ruff format failed:\n{fmt.stdout}\n{fmt.stderr}"
+
+    result = subprocess.run(
+        [str(python_exe), "-m", "pytest", "-q"],
+        cwd=project,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"

@@ -1,7 +1,28 @@
 [project]
 name = "copier-fastapi-forge"
 version = "0.1.0"
-description = "Add your description here"
+description = "Native Copier template for minimal FastAPI backend services"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = []
+
+[dependency-groups]
+dev = [
+    "copier>=9.10.2",
+    "httpx>=0.28.1",
+    "pytest>=8.4.1",
+    "pytest-cov>=6.2.1",
+    "ruff>=0.12.4",
+    "ty>=0.0.1a16",
+]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]

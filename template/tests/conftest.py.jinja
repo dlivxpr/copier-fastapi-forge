@@ -1,0 +1,23 @@
+from __future__ import annotations
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+
+@pytest.fixture
+async def client() -> AsyncClient:
+    from app.main import app
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
+
+
+@pytest.fixture
+def valid_key() -> str:
+    return "[[ deployment_api_key ]]"
+
+
+@pytest.fixture
+def api_key_headers(valid_key: str) -> dict[str, str]:
+    return {"X-API-Key": valid_key}

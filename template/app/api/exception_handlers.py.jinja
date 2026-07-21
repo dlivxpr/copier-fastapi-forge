@@ -1,0 +1,35 @@
+from __future__ import annotations
+
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+from app.core.exceptions import DomainError
+
+
+def _build_error_response(exc: DomainError, status_code: int) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "error": {
+                "code": exc.code,
+                "message": exc.message,
+                "details": exc.details,
+            }
+        },
+    )
+
+
+async def domain_error_handler(request: Request, exc: DomainError) -> JSONResponse:
+    status_map: dict[str, int] = {
+        "NOT_FOUND": 404,
+        "UNAUTHORIZED": 401,
+        "VALIDATION_ERROR": 422,
+    }
+    status_code = status_map.get(exc.code, 500)
+    return _build_error_response(exc, status_code)
+
+
+def register_exception_handlers(app: object) -> None:
+    from app.core.exceptions import DomainError
+
+    app.add_exception_handler(DomainError, domain_error_handler)

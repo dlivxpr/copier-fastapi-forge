@@ -1,0 +1,32 @@
+# omp Rules — [[ project_name ]]
+
+## Architecture
+
+- FastAPI 应用使用 thin-route 模式：route 只处理 HTTP 解析/响应，业务逻辑在 service 层。
+- 依赖注入使用 `Annotated` + `Depends`，在 `app/api/deps.py` 统一声明。
+- CORS 始终启用，通过 `CORS_ORIGINS` 环境变量配置。
+- 分页 helper 位于 `app/core/pagination.py`，可供所有集合接口使用。
+
+## Auth
+
+- 所有业务路由受部署级 API Key 保护，通过 `API_KEY` 环境变量配置。
+- 健康探针 `/health/live` 和 `/health/ready` 公开访问，无需携带凭据。
+- 不生成用户账号、JWT、OAuth、角色模型或租户。
+
+## Error Format
+
+- 所有异常统一映射为 `{ "error": { "code", "message", "details" } }`。
+- Domain exception 定义在 `app/core/exceptions.py`。
+- Exception handler 注册在 `app/api/exception_handlers.py`。
+
+## Testing
+
+- 使用 HTTPX `AsyncClient` + `ASGITransport` 测试 ASGI 行为。
+- 每个测试后清理 `app.dependency_overrides`。
+- 不 mock 内部实现细节；通过公开 HTTP 接口验证行为。
+
+## Constraints
+
+- 本项目默认不包含数据库、缓存、任务队列或智能体能力。
+- 不要引入未明确要求的第三方依赖。
+- 所有 I/O 操作使用 async。

@@ -1,0 +1,41 @@
+_subdirectory: template
+_templates_suffix: .jinja
+_envops:
+  block_start_string: "[%"
+  block_end_string: "%]"
+  variable_start_string: "[["
+  variable_end_string: "]]"
+  comment_start_string: "[#"
+  comment_end_string: "#]"
+_exclude: []
+
+project_name:
+  type: str
+  help: Human-readable project name
+  default: "FastAPI Service"
+
+project_slug:
+  type: str
+  help: Python-safe project name
+  default: "fastapi-service"
+
+project_description:
+  type: str
+  help: Short description of the service
+  default: "A FastAPI backend service"
+
+module_name:
+  type: str
+  help: Python module name (PEP 508 normalized)
+  default: "[[ project_slug | replace('-', '_') | replace(' ', '_') | lower ]]"
+
+python_version:
+  type: str
+  help: Minimum Python version
+  default: "3.11"
+
+deployment_api_key:
+  type: str
+  secret: true
+  help: Deployment API key shared by all callers
+  default: "dev-key-CHANGEME"

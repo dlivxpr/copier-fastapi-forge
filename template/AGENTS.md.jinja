@@ -1,0 +1,70 @@
+# [[ project_name ]]
+
+[[ project_description ]]
+
+## Project Structure
+
+```
+[[ project_slug ]]/
+├── app/
+│   ├── __init__.py
+│   ├── main.py          # FastAPI application with CORS and lifespan
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── config.py    # Pydantic settings
+│   │   ├── exceptions.py # Domain exceptions
+│   │   └── pagination.py # Pagination helper
+│   └── api/
+│       ├── __init__.py
+│       ├── deps.py      # FastAPI dependencies
+│       ├── exception_handlers.py
+│       └── router.py    # Business routes
+├── tests/
+│   ├── __init__.py
+│   ├── conftest.py
+│   └── test_api.py
+├── pyproject.toml
+├── .env.example
+└── .python-version
+```
+
+## Quick Start
+
+```bash
+# Install dependencies
+uv sync --all-groups
+
+# Run the server
+uv run uvicorn app.main:app --reload
+
+# Run tests
+uv run pytest
+```
+
+## Architecture
+
+This service follows a thin-route pattern:
+
+- **Routes** (`app/api/router.py`): HTTP concerns only — parse input, call service, return response.
+- **Core** (`app/core/`): Domain exceptions, configuration, pagination.
+- **Dependencies** (`app/api/deps.py`): FastAPI dependency injection for API key, configuration.
+
+All business routes are protected by a deployment-level API key. Health probes (`/health/live`, `/health/ready`) are public.
+
+### Error Format
+
+All errors are returned in a uniform envelope:
+
+```json
+{
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Resource not found",
+    "details": {}
+  }
+}
+```
+
+### Pagination
+
+Collection endpoints accept `offset` and `limit` query parameters and return a paginated response.

@@ -1,0 +1,20 @@
+from __future__ import annotations
+
+from fastapi import APIRouter
+
+from app.api.deps import RequireApiKey
+from app.core.exceptions import NotFoundError
+
+router = APIRouter(dependencies=[RequireApiKey])
+
+
+@router.get("/hello")
+async def hello(name: str = "world") -> dict[str, str]:
+    """A simple greeting endpoint (API-key protected)."""
+    return {"message": f"Hello, {name}!"}
+
+
+@router.get("/items/{item_id}")
+async def get_item(item_id: str) -> dict[str, object]:
+    """Demonstrates the error envelope on a missing resource."""
+    raise NotFoundError(resource="Item", identifier=item_id)

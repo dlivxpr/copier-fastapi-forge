@@ -1,0 +1,26 @@
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import Depends, Header
+
+from app.core.config import Settings
+from app.core.exceptions import UnauthorizedError
+
+
+def _get_settings() -> Settings:
+    return Settings()
+
+
+SettingsDep = Annotated[Settings, Depends(_get_settings)]
+
+
+def _verify_api_key(
+    settings: SettingsDep,
+    x_api_key: Annotated[str | None, Header(alias="X-API-Key")] = None,
+) -> None:
+    if x_api_key != settings.api_key:
+        raise UnauthorizedError("Invalid or missing API key")
+
+
+RequireApiKey = Depends(_verify_api_key)
