@@ -49,6 +49,7 @@ def test_copier_public_api_renders_default_root_service(tmp_path: Path) -> None:
         "app/tasks",
         "app/schemas",
         "app/services",
+        "tests/test_persistence.py",
         "compose.yaml",
         "deploy/postgres",
         "deploy/redis",
@@ -104,6 +105,7 @@ def test_postgresql_renders_selected_orm_slice(
         "app/schemas/resource.py",
         "app/services/resource.py",
         "compose.yaml",
+        "tests/test_persistence.py",
     ]
     assert not [path for path in expected_paths if not (project / path).is_file()]
 

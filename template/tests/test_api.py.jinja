@@ -2,7 +2,10 @@ from __future__ import annotations
 
 [% if database == "postgresql" %]from uuid import uuid4
 
-[% endif %]from httpx import AsyncClient
+[% endif %]import pytest
+from httpx import AsyncClient
+
+pytestmark = pytest.mark.anyio
 
 
 async def test_liveness_unauthenticated(client: AsyncClient) -> None:

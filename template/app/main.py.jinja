@@ -11,11 +11,14 @@ from app.api.router import router
 from app.core.config import Settings
 [% if database == "postgresql" %]from app.db.session import database
 [% endif %]
+settings = Settings()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Initialize and tear down shared resources."""
-    try:
+[% if database == "postgresql" %]    database.initialize(settings.database_url)
+[% endif %]    try:
         yield
     finally:
 [% if database == "postgresql" %]        await database.close()
@@ -28,7 +31,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-settings = Settings()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in settings.cors_origins.split(",")],

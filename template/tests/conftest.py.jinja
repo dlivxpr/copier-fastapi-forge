@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -9,6 +9,19 @@ from httpx import ASGITransport, AsyncClient
 from app.db.session import database
 from app.models.resource import Resource
 [% endif %]
+
+@pytest.fixture(scope="session")
+def anyio_backend() -> str:
+    return "asyncio"
+
+
+@pytest.fixture(autouse=True)
+def clear_dependency_overrides() -> Iterator[None]:
+    from app.main import app
+
+    yield
+    app.dependency_overrides.clear()
+
 
 @pytest.fixture
 async def client() -> AsyncIterator[AsyncClient]:
@@ -21,7 +34,7 @@ async def client() -> AsyncIterator[AsyncClient]:
 [% if database == "postgresql" %]
 
 @pytest.fixture(autouse=True)
-async def clean_database() -> None:
+async def clean_database(client: AsyncClient) -> None:
     async with database.session() as session:
 [% if orm == "sqlalchemy" %]        await session.execute(delete(Resource))
 [% else %]        await session.exec(delete(Resource))

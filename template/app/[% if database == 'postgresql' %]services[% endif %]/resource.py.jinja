@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.core.exceptions import ConflictError, NotFoundError, PersistenceError
+from app.core.pagination import PaginationParams
 from app.models.resource import Resource
 from app.repositories.resource import ResourceRepository
 from app.schemas.resource import ResourceCreate, ResourceUpdate
@@ -34,9 +35,9 @@ class ResourceService:
             raise NotFoundError(resource="Resource", identifier=str(resource_id))
         return resource
 
-    async def list_resources(self, *, offset: int, limit: int) -> tuple[list[Resource], int]:
+    async def list_resources(self, pagination: PaginationParams) -> tuple[list[Resource], int]:
         try:
-            return await self.repository.list_resources(offset=offset, limit=limit)
+            return await self.repository.list_resources(pagination)
         except SQLAlchemyError as exc:
             raise PersistenceError(resource="Resource") from exc
 

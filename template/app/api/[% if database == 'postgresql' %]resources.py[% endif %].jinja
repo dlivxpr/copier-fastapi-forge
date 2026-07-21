@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, Response, status
 
-from app.api.deps import ResourceServiceDep
+from app.api.deps import PaginationDep, ResourceServiceDep
 from app.core.pagination import PaginatedResponse
 from app.schemas.resource import ResourceCreate, ResourceRead, ResourceUpdate
 
@@ -27,15 +27,14 @@ async def get_resource(resource_id: UUID, service: ResourceServiceDep) -> Resour
 @router.get("", response_model=PaginatedResponse[ResourceRead])
 async def list_resources(
     service: ResourceServiceDep,
-    offset: int = Query(default=0, ge=0),
-    limit: int = Query(default=20, ge=1, le=100),
+    pagination: PaginationDep,
 ) -> PaginatedResponse[ResourceRead]:
-    resources, total = await service.list_resources(offset=offset, limit=limit)
+    resources, total = await service.list_resources(pagination)
     return PaginatedResponse(
         items=[ResourceRead.model_validate(resource) for resource in resources],
         total=total,
-        offset=offset,
-        limit=limit,
+        offset=pagination.offset,
+        limit=pagination.limit,
     )
 
 

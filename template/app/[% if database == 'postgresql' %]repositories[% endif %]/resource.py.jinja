@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 [% endif %]
+from app.core.pagination import PaginationParams
 from app.models.resource import Resource
 
 
@@ -26,15 +27,18 @@ class ResourceRepository:
     async def get(self, resource_id: UUID) -> Resource | None:
         return await self.session.get(Resource, resource_id)
 
-    async def list_resources(self, *, offset: int, limit: int) -> tuple[list[Resource], int]:
+    async def list_resources(self, pagination: PaginationParams) -> tuple[list[Resource], int]:
 [% if orm == "sqlalchemy" %]        statement = (
-            select(Resource).order_by(Resource.created_at, Resource.id).offset(offset).limit(limit)
+            select(Resource)
+            .order_by(Resource.created_at, Resource.id)
+            .offset(pagination.offset)
+            .limit(pagination.limit)
         )
 [% else %]        statement = (
             select(Resource)
             .order_by(col(Resource.created_at), col(Resource.id))
-            .offset(offset)
-            .limit(limit)
+            .offset(pagination.offset)
+            .limit(pagination.limit)
         )
 [% endif %][% if orm == "sqlalchemy" %]        resources = list((await self.session.scalars(statement)).all())
         total = await self.session.scalar(select(func.count()).select_from(Resource))

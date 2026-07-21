@@ -9,6 +9,7 @@ from fastapi import Depends, Header
 [% endif %][% endif %]
 from app.core.config import Settings
 from app.core.exceptions import UnauthorizedError
+from app.core.pagination import PaginationParams
 [% if database == "postgresql" %]from app.db.session import database
 from app.repositories.resource import ResourceRepository
 from app.services.resource import ResourceService
@@ -19,6 +20,7 @@ def _get_settings() -> Settings:
 
 
 SettingsDep = Annotated[Settings, Depends(_get_settings)]
+PaginationDep = Annotated[PaginationParams, Depends()]
 
 
 def _verify_api_key(
