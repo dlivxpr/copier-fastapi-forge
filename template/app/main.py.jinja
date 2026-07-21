@@ -14,8 +14,6 @@ from app.core.config import Settings
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Initialize and tear down shared resources."""
-    settings = Settings()
-    app.state.settings = settings
     yield
 
 

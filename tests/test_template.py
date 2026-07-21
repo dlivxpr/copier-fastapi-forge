@@ -5,12 +5,13 @@ import subprocess
 import sys
 import tomllib
 from pathlib import Path
+from typing import cast
 
 import pytest
 from copier import run_copy
 
 TEMPLATE_ROOT = Path(__file__).parents[1]
-UV = shutil.which("uv")
+UV: str = shutil.which("uv") or "uv"
 
 
 def render_project(destination: Path, data: dict[str, object] | None = None) -> Path:
@@ -25,7 +26,8 @@ def render_project(destination: Path, data: dict[str, object] | None = None) -> 
 
 
 def project_metadata(project: Path) -> dict[str, object]:
-    return tomllib.loads((project / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    raw = tomllib.loads((project / "pyproject.toml").read_text(encoding="utf-8"))
+    return raw["project"]  # type: ignore[no-any-return]
 
 
 def test_copier_public_api_renders_default_root_service(tmp_path: Path) -> None:
@@ -49,7 +51,8 @@ def test_copier_public_api_renders_default_root_service(tmp_path: Path) -> None:
     ]
     assert not [path for path in forbidden_paths if (project / path).exists()]
 
-    dependencies = project_metadata(project)["dependencies"]
+    raw_deps = project_metadata(project)["dependencies"]
+    deps: list[str] = cast("list[str]", raw_deps)
     forbidden_dependencies = {
         "alembic",
         "asyncpg",
@@ -62,7 +65,7 @@ def test_copier_public_api_renders_default_root_service(tmp_path: Path) -> None:
         "taskiq",
     }
     assert forbidden_dependencies.isdisjoint(
-        dependency.partition(">=")[0].partition("[")[0] for dependency in dependencies
+        dep.partition(">=")[0].partition("[")[0] for dep in deps
     )
 
 
@@ -122,7 +125,8 @@ def test_default_project_installs_and_passes_runtime_contract(tmp_path: Path) ->
         text=True,
         capture_output=True,
     )
-    python_exe = project / ".venv" / "Scripts" / "python.exe"
+    exe_name = "python.exe" if sys.platform == "win32" else "python"
+    python_exe = project / ".venv" / ("Scripts" if sys.platform == "win32" else "bin") / exe_name
 
     lint = subprocess.run(
         [str(python_exe), "-m", "ruff", "check", "."],
@@ -147,3 +151,11 @@ def test_default_project_installs_and_passes_runtime_contract(tmp_path: Path) ->
         capture_output=True,
     )
     assert result.returncode == 0, f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
+
+    import_check = subprocess.run(
+        [str(python_exe), "-c", "from app.main import app; assert app.title"],
+        cwd=project,
+        text=True,
+        capture_output=True,
+    )
+    assert import_check.returncode == 0, f"app import failed:\n{import_check.stderr}"

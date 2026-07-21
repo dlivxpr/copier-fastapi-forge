@@ -3,7 +3,7 @@ name = "[[ module_name ]]"
 version = "0.1.0"
 description = "[[ project_description ]]"
 readme = "README.md"
-requires-python = ">=[% if python_version == '3.14' %]3.11[% else %][[ python_version ]][% endif %]"
+requires-python = ">=[[ python_version ]]"
 dependencies = [
     "fastapi[standard]>=0.115.0",
     "pydantic-settings>=2.7.0",
@@ -23,7 +23,7 @@ dev = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py[[ python_version | replace('.', '') ]]"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]

@@ -10,7 +10,7 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    api_key: str = "dev-key-CHANGEME"
+    api_key: str = "[[ deployment_api_key ]]"
     cors_origins: str = "*"
     host: str = "0.0.0.0"
     port: int = 8000
