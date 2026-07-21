@@ -97,3 +97,17 @@ uv run python scripts/lint_template.py
 - 生成后端自带独立测试，使用 AnyIO、FastAPI dependency overrides 和 HTTPX ASGI transport；其 coverage 配置要求 `fail_under = 100`。
 
 修改生成器时先运行最窄的相关测试，再运行 `uv run pytest -m "not slow"`；涉及模板结构、条件变量或 hook 时，必须额外生成至少一个受影响配置并执行 `scripts/lint_template.py`。交付前运行 Ruff check、format check、`ty check`；只有影响完整生成矩阵时才运行包含 `slow` 的全套测试。测试应验证可观察的生成结果和运行行为，不要断言无意义的源码文本细节。
+
+## Agent skills
+
+### Issue tracker
+
+本仓库使用 GitHub Issues 跟踪 issue 和 PRD。详见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+本仓库使用五个默认 canonical triage 标签。详见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+本仓库使用 single-context domain docs 布局。详见 `docs/agents/domain.md`。
