@@ -1,10 +1,26 @@
 """Item request and response schemas."""
 
+from datetime import datetime
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.base import BaseSchema, TimestampSchema
+
+class BaseSchema(BaseModel):
+    """Base schema configured for ORM response serialization."""
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        str_strip_whitespace=True,
+    )
+
+
+class TimestampSchema(BaseModel):
+    """Creation and update timestamps."""
+
+    created_at: datetime
+    updated_at: datetime | None = None
 
 
 class ItemBase(BaseSchema):

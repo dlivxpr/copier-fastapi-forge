@@ -7,12 +7,13 @@ import pytest
 from fastapi import APIRouter, Depends
 from httpx import AsyncClient
 [% if orm_type == "sqlalchemy" %]from sqlalchemy import text
-[% endif %]from sqlalchemy.ext.asyncio import AsyncEngine
+[% endif %]from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.pool import NullPool
 [% if orm_type == "sqlmodel" %]from sqlmodel import select
 [% endif %]
 from app.api.deps import DBSession, verify_api_key
-from app.db.session import get_worker_db_context
+from app.db.session import AsyncSession, get_worker_db_context
 from app.main import app
 from app.repositories import item as item_repo
 
@@ -101,6 +102,25 @@ async def test_request_failure_rolls_back_flushed_item(
         headers=api_key_headers,
     )
     assert missing.status_code == 404
+
+
+async def test_commit_failure_is_reported_before_a_success_response(
+    client: AsyncClient,
+    api_key_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fail_commit(self: AsyncSession) -> None:
+        raise SQLAlchemyError("forced commit failure")
+
+    monkeypatch.setattr(AsyncSession, "commit", fail_commit)
+    failed = await client.post(
+        "/api/v1/items",
+        headers=api_key_headers,
+        json={"name": "must not be acknowledged"},
+    )
+
+    assert failed.status_code == 500
+    assert failed.json()["error"]["code"] == "INTERNAL_ERROR"
 
 
 async def test_worker_context_uses_null_pool_and_disposes_engine(

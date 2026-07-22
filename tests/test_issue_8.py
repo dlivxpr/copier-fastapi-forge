@@ -4,6 +4,7 @@ import os
 import subprocess
 import textwrap
 import time
+import tomllib
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -200,6 +201,18 @@ def test_item_crud_switch_controls_the_complete_generated_slice(tmp_path: Path) 
     )
     for relative_path in item_paths:
         assert not (without_items / relative_path).exists()
+    shared_schemas = (without_items / "app" / "schemas" / "base.py").read_text(encoding="utf-8")
+    assert "class BaseSchema" not in shared_schemas
+    assert "class TimestampSchema" not in shared_schemas
+    without_database = render_project(
+        tmp_path / "without-database-with-item-answer",
+        project_answers(database="none", include_example_crud=True),
+    )
+    for relative_path in item_paths:
+        assert not (without_database / relative_path).exists()
+    guidance = (without_database / "AGENTS.md").read_text(encoding="utf-8")
+    assert "app/db/models/item.py" not in guidance
+    assert "Item 仅提供" not in guidance
 
     with_items = render_project(
         tmp_path / "with-items",
@@ -296,6 +309,27 @@ def postgresql_server() -> Iterator[tuple[str, int]]:
             text=True,
             timeout=30,
         )
+
+
+def test_dual_orm_specific_outputs_are_trace_protected() -> None:
+    trace = tomllib.loads(
+        (TEMPLATE_ROOT / "docs" / "migration-traceability.toml").read_text(encoding="utf-8")
+    )
+    protected_outputs = {(record.get("profile"), record["target"]) for record in trace["target"]}
+    orm_specific_paths = {
+        "pyproject.toml",
+        "app/api/deps.py",
+        "app/api/health.py",
+        "app/db/base.py",
+        "app/db/session.py",
+        "app/db/models/item.py",
+        "app/repositories/item.py",
+        "app/services/item.py",
+    }
+
+    for orm_type in ("sqlalchemy", "sqlmodel"):
+        profile = f"postgresql_{orm_type}_items"
+        assert {(profile, path) for path in orm_specific_paths} <= protected_outputs
 
 
 @pytest.mark.parametrize("orm_type", ["sqlalchemy", "sqlmodel"])

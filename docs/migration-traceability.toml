@@ -176,8 +176,17 @@ legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/api/d
 target = "app/api/deps.py"
 allowed_transformations = ["删除身份依赖", "deployment API Key 替换", "恢复 DBSession"]
 removed_references = ["CurrentUser、JWT、分页依赖"]
-approved_deviation = ["DBSession 直接绑定 get_db_session"]
-verification = ["test_postgresql_cli_health_and_lifespan_runtime_contract"]
+approved_deviation = ["DBSession 以 function scope 绑定 get_db_session，确保事务在响应发送前完成"]
+verification = ["test_postgresql_cli_health_and_lifespan_runtime_contract", "test_both_orms_pass_real_postgresql_contract"]
+
+[[target]]
+profile = "postgresql_sqlmodel_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/api/deps.py"
+target = "app/api/deps.py"
+allowed_transformations = ["删除身份依赖", "deployment API Key 替换", "恢复 SQLModel DBSession"]
+removed_references = ["CurrentUser、JWT、分页依赖"]
+approved_deviation = ["DBSession 使用 SQLModel AsyncSession 并绑定 function-scoped get_db_session"]
+verification = ["test_both_orms_pass_real_postgresql_contract"]
 
 [[target]]
 profile = "postgresql_sqlalchemy_items"
@@ -187,6 +196,15 @@ allowed_transformations = ["根路径迁移", "仅保留 PostgreSQL readiness"]
 removed_references = ["Redis、RAG、LLM provider、billing、Celery probes"]
 approved_deviation = ["readiness 通过 DBSession 执行 SELECT 1"]
 verification = ["test_postgresql_cli_health_and_lifespan_runtime_contract"]
+
+[[target]]
+profile = "postgresql_sqlmodel_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/api/routes/v1/health.py"
+target = "app/api/health.py"
+allowed_transformations = ["根路径迁移", "仅保留 PostgreSQL readiness", "使用 SQLModel select 与 exec"]
+removed_references = ["Redis、RAG、LLM provider、billing、Celery probes"]
+approved_deviation = ["readiness 通过 SQLModel DBSession 执行 SELECT 1"]
+verification = ["test_both_orms_pass_real_postgresql_contract"]
 
 [[target]]
 profile = "postgresql_sqlalchemy_items"
@@ -243,6 +261,15 @@ approved_deviation = ["事务由 session manager 独占"]
 verification = ["test_both_orms_pass_real_postgresql_contract"]
 
 [[target]]
+profile = "postgresql_sqlmodel_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/repositories/item.py"
+target = "app/repositories/item.py"
+allowed_transformations = ["删除 owner 与 list 查询", "使用 SQLModel select、exec 与 col", "保留 flush 与 refresh"]
+removed_references = ["owner_id、list_for_owner、count、分页"]
+approved_deviation = ["事务由 session manager 独占"]
+verification = ["test_both_orms_pass_real_postgresql_contract"]
+
+[[target]]
 profile = "postgresql_sqlalchemy_items"
 legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/services/item.py"
 target = "app/services/item.py"
@@ -252,12 +279,21 @@ approved_deviation = ["缺失 Item 继续使用 legacy NotFoundError message 与
 verification = ["test_both_orms_pass_real_postgresql_contract"]
 
 [[target]]
+profile = "postgresql_sqlmodel_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/services/item.py"
+target = "app/services/item.py"
+allowed_transformations = ["删除 owner 检查与 list service", "使用 SQLModel AsyncSession"]
+removed_references = ["owner_id、CurrentUser ownership、list"]
+approved_deviation = ["缺失 Item 继续使用 legacy NotFoundError message 与 details"]
+verification = ["test_both_orms_pass_real_postgresql_contract"]
+
+[[target]]
 profile = "postgresql_sqlalchemy_items"
 legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/schemas/item.py"
 target = "app/schemas/item.py"
-allowed_transformations = ["删除 owner 与分页 schema"]
+allowed_transformations = ["删除 owner 与分页 schema", "内联仅 Item 使用的 BaseSchema 与 TimestampSchema"]
 removed_references = ["owner_id、ItemList"]
-approved_deviation = ["create、update、read 字段约束保持 legacy"]
+approved_deviation = ["create、update、read 字段约束保持 legacy", "Item 关闭时不生成 ORM schema 支撑代码"]
 verification = ["test_item_crud_switch_controls_the_complete_generated_slice"]
 
 [[target]]
