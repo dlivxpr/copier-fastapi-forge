@@ -1,0 +1,55 @@
+"""Logging utilities with secret redaction."""
+
+import logging
+import re
+from typing import ClassVar
+
+
+class SecretRedactionFilter(logging.Filter):
+    """Remove deployment and provider credentials from log records."""
+
+    PATTERNS: ClassVar[list[tuple[re.Pattern[str], str]]] = [
+        (re.compile(r"sk-[a-zA-Z0-9]{20,}"), "[API_KEY_REDACTED]"),
+        (
+            re.compile(
+                r"(?:token|key|secret|password|authorization)[=: ]+['\"]?"
+                r"([A-Za-z0-9_/+=.-]{10,})",
+                re.IGNORECASE,
+            ),
+            "[SECRET_REDACTED]",
+        ),
+        (
+            re.compile(
+                r"(password|passwd|pwd|secret_key|api_key|apikey|auth_token)"
+                r"[\s]*[=:]\s*['\"]?\S+['\"]?",
+                re.IGNORECASE,
+            ),
+            r"\1=[REDACTED]",
+        ),
+    ]
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = self._redact(record.msg)
+        if isinstance(record.args, dict):
+            record.args = {
+                key: self._redact(value) if isinstance(value, str) else value
+                for key, value in record.args.items()
+            }
+        elif isinstance(record.args, tuple):
+            record.args = tuple(
+                self._redact(value) if isinstance(value, str) else value for value in record.args
+            )
+        return True
+
+    def _redact(self, value: str) -> str:
+        for pattern, replacement in self.PATTERNS:
+            value = pattern.sub(replacement, value)
+        return value
+
+
+def setup_logging() -> None:
+    """Attach the redaction filter once to the root logger."""
+    root_logger = logging.getLogger()
+    if not any(isinstance(item, SecretRedactionFilter) for item in root_logger.filters):
+        root_logger.addFilter(SecretRedactionFilter())

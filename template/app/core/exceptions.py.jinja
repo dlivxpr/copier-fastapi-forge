@@ -1,63 +1,85 @@
-from __future__ import annotations
+"""Application exceptions with HTTP status ownership."""
 
 from typing import Any
 
 
-class DomainError(Exception):
-    """Base class for all domain exceptions."""
+class AppException(Exception):
+    """Base exception for errors exposed through the API envelope."""
 
-    def __init__(self, code: str, message: str, details: dict[str, Any] | None = None) -> None:
-        self.code = code
-        self.message = message
-        self.details = details or {}
-        super().__init__(message)
+    message: str = "An error occurred"
+    code: str = "APP_ERROR"
+    status_code: int = 500
 
+    def __init__(
+        self,
+        message: str | None = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        self.message = message or self.__class__.message
+        self.code = code or self.__class__.code
+        self.details = details
+        super().__init__(self.message)
 
-class NotFoundError(DomainError):
-    def __init__(self, resource: str, identifier: str) -> None:
-        super().__init__(
-            code="NOT_FOUND",
-            message=f"{resource} not found: {identifier}",
-            details={"resource": resource, "identifier": identifier},
-        )
-
-
-[% if database == "postgresql" %]class ConflictError(DomainError):
-    def __init__(self, resource: str, field: str) -> None:
-        super().__init__(
-            code="CONFLICT",
-            message=f"{resource} already exists",
-            details={"resource": resource, "field": field},
-        )
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(message={self.message!r}, code={self.code!r})"
 
 
-class PersistenceError(DomainError):
-    def __init__(self, resource: str) -> None:
-        super().__init__(
-            code="PERSISTENCE_ERROR",
-            message=f"Could not persist {resource}",
-            details={"resource": resource},
-        )
+class NotFoundError(AppException):
+    message = "Resource not found"
+    code = "NOT_FOUND"
+    status_code = 404
 
 
-[% endif %][% if agent_capability == "pydantic-ai" %]class AgentInvocationError(DomainError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="AGENT_INVOCATION_ERROR",
-            message="Agent invocation failed",
-        )
+class AlreadyExistsError(AppException):
+    message = "Resource already exists"
+    code = "ALREADY_EXISTS"
+    status_code = 409
 
 
-[% endif %]class UnauthorizedError(DomainError):
-    def __init__(self, message: str = "Unauthorized") -> None:
-        super().__init__(code="UNAUTHORIZED", message=message)[% if rate_limiting != "none" %]
+class ValidationError(AppException):
+    message = "Validation error"
+    code = "VALIDATION_ERROR"
+    status_code = 422
 
 
-class RateLimitError(DomainError):
-    def __init__(self, retry_after_seconds: int) -> None:
-        super().__init__(
-            code="RATE_LIMIT_EXCEEDED",
-            message="Rate limit exceeded",
-            details={"retry_after_seconds": retry_after_seconds},
-        )
-[%- endif %]
+class APIKeyMissingError(AppException):
+    message = "API Key header missing"
+    code = "AUTHENTICATION_ERROR"
+    status_code = 401
+
+
+class InvalidAPIKeyError(AppException):
+    message = "Invalid API Key"
+    code = "AUTHORIZATION_ERROR"
+    status_code = 403
+
+
+class BadRequestError(AppException):
+    message = "Bad request"
+    code = "BAD_REQUEST"
+    status_code = 400
+
+
+class ExternalServiceError(AppException):
+    message = "External service unavailable"
+    code = "EXTERNAL_SERVICE_ERROR"
+    status_code = 503
+
+
+[% if database == "postgresql" %]class DatabaseError(AppException):
+    message = "Database error"
+    code = "DATABASE_ERROR"
+    status_code = 500
+
+
+[% endif %][% if enable_rate_limiting %]class RateLimitError(AppException):
+    message = "Rate limit exceeded"
+    code = "RATE_LIMIT_EXCEEDED"
+    status_code = 429
+
+
+[% endif %]class InternalError(AppException):
+    message = "Internal server error"
+    code = "INTERNAL_ERROR"
+    status_code = 500

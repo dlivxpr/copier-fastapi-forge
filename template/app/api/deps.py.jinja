@@ -1,77 +1,27 @@
-from __future__ import annotations
+"""FastAPI dependencies shared by business routes."""
 
-[% if database == "postgresql" %]from collections.abc import AsyncIterator
-[% endif %]from typing import Annotated
+import secrets
+from typing import Annotated
 
-from fastapi import Depends, Header
-[% if database == "postgresql" %][% if orm == "sqlalchemy" %]from sqlalchemy.ext.asyncio import AsyncSession
-[% else %]from sqlmodel.ext.asyncio.session import AsyncSession
-[% endif %][% endif %]
-[% if agent_capability == "pydantic-ai" %]from app.agents.assistant import (
-    AgentDependencies,
-    AssistantAgent,
-    create_configured_agent,
-)
-[% endif %]from app.core.config import Settings
-from app.core.exceptions import UnauthorizedError
-from app.core.pagination import PaginationParams
-[% if database == "postgresql" %]from app.db.session import database
-from app.repositories.resource import ResourceRepository
-[% endif %][% if agent_capability == "pydantic-ai" %]from app.services.agent import AgentInvocationService
-[% endif %][% if database == "postgresql" %]from app.services.resource import ResourceService
-[% endif %]
+from fastapi import Depends
+from fastapi.security import APIKeyHeader
 
-def _get_settings() -> Settings:
-    return Settings()
+from app.core.config import settings
+from app.core.exceptions import APIKeyMissingError, InvalidAPIKeyError
+
+api_key_header = APIKeyHeader(name=settings.API_KEY_HEADER, auto_error=False)
 
 
-SettingsDep = Annotated[Settings, Depends(_get_settings)]
-PaginationDep = Annotated[PaginationParams, Depends()]
+async def verify_api_key(
+    api_key: Annotated[str | None, Depends(api_key_header)],
+) -> str:
+    """Verify the deployment API key using constant-time comparison."""
+    if api_key is None:
+        raise APIKeyMissingError()
+    if not secrets.compare_digest(api_key, settings.API_KEY):
+        raise InvalidAPIKeyError()
+    return api_key
 
 
-def _verify_api_key(
-    settings: SettingsDep,
-    x_api_key: Annotated[str | None, Header(alias="X-API-Key")] = None,
-) -> None:
-    if x_api_key != settings.api_key:
-        raise UnauthorizedError("Invalid or missing API key")
-
-
-RequireApiKey = Depends(_verify_api_key)
-[% if agent_capability == "pydantic-ai" %]
-
-def get_agent(settings: SettingsDep) -> AssistantAgent:
-    return create_configured_agent(settings)
-
-
-AgentDep = Annotated[AssistantAgent, Depends(get_agent)]
-
-
-def get_agent_dependencies(settings: SettingsDep) -> AgentDependencies:
-    return AgentDependencies(model_name=settings.llm_model)
-
-
-AgentDependenciesDep = Annotated[AgentDependencies, Depends(get_agent_dependencies)]
-
-
-def get_agent_service(
-    agent: AgentDep,
-    dependencies: AgentDependenciesDep,
-) -> AgentInvocationService:
-    return AgentInvocationService(agent, dependencies)
-[% endif %][% if database == "postgresql" %]
-
-async def get_session() -> AsyncIterator[AsyncSession]:
-    async with database.session() as session:
-        yield session
-
-
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
-
-
-def get_resource_service(session: SessionDep) -> ResourceService:
-    return ResourceService(ResourceRepository(session))
-
-
-ResourceServiceDep = Annotated[ResourceService, Depends(get_resource_service)]
-[% endif -%]
+ValidAPIKey = Annotated[str, Depends(verify_api_key)]
+RequireApiKey = Depends(verify_api_key)

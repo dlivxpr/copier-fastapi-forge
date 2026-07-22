@@ -2,101 +2,33 @@
 
 [[ project_description ]]
 
-## Project Structure
+## 目录与运行
 
-```
-[[ project_slug ]]/
-├── app/
-│   ├── __init__.py
-│   ├── main.py          # FastAPI application with CORS and lifespan
-│   ├── core/
-│   │   ├── __init__.py
-│   │   ├── config.py    # Pydantic settings
-│   │   ├── exceptions.py # Domain exceptions
-│   │   └── pagination.py # Pagination helper
-│   └── api/
-│       ├── __init__.py
-│       ├── deps.py      # FastAPI dependencies
-│       ├── exception_handlers.py
-│       └── router.py    # Business routes
-├── tests/
-│   ├── __init__.py
-│   ├── conftest.py
-│   └── test_api.py
-├── pyproject.toml
-├── .env.example
-└── .python-version
-```
-
-## Quick Start
+- `app/main.py`：FastAPI factory 与 async lifespan。
+- `app/api/health.py`：公开健康探针。
+- `app/api/deps.py`：deployment API Key 依赖。
+- `app/core/`：Settings、异常、日志和 Request ID middleware。
+- `cli/commands.py`：项目管理 CLI。
+- `tests/`：通过 HTTPX `AsyncClient` + `ASGITransport` 验证公开行为。
 
 ```bash
-# Install dependencies
 uv sync --all-groups
-
-# Run the server
-uv run uvicorn app.main:app --reload
-
-# Run tests
+uv run [[ project_slug ]] server run --port [[ backend_port ]]
 uv run pytest
 ```
-[% if background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]
-Redis 消费能力需要共享实例：
 
-[% if docker %]
-```bash
-docker compose -f deploy/compose.yaml up -d redis
-```
-[% else %]
-在运行应用前，让 `REDIS_URL` 指向外部 Redis 实例。
+## 运行时 contract
+
+- `/health`、`/health/live`、`/health/ready` 公开访问。
+- 所有业务 route 必须挂载 deployment API Key dependency；凭据来自 `API_KEY`，请求头名称来自 `API_KEY_HEADER`。
+- 应用异常使用 `AppException`，由异常自身拥有 `code` 与 `status_code`。
+- 错误响应保持 `{ "error": { "code", "message", "details" } }`。
+- 未处理异常记录完整日志，但只向调用方返回安全的 `INTERNAL_ERROR` envelope。
+- 请求关联使用 `X-Request-ID`；日志不得输出 API Key、token、password 或 secret。
+[% if enable_cors %]- CORS 已启用，通过 `CORS_ORIGINS`、`CORS_ALLOW_CREDENTIALS`、`CORS_ALLOW_METHODS` 和 `CORS_ALLOW_HEADERS` 配置。
 [% endif %]
-[% endif %]
-[% if background_tasks == "taskiq" %]
-后台任务使用以下独立进程：
+## 约束
 
-```bash
-# 启动 worker
-uv run taskiq worker app.tasks.taskiq:broker
-
-# 启动 scheduler
-uv run taskiq scheduler app.tasks.taskiq:scheduler
-```
-[% endif %]
-
-## Architecture
-
-This service follows a thin-route pattern:
-
-- **Routes** (`app/api/router.py`): HTTP concerns only — parse input, call service, return response.
-- **Core** (`app/core/`): Domain exceptions, configuration, pagination.
-- **Dependencies** (`app/api/deps.py`): FastAPI dependency injection for API key, configuration.
-[% if database == "none" %]- 本项目未启用持久化能力，不包含 ORM、migration 或数据库 session。
-[% else %]- **Persistence**: PostgreSQL 持久化使用 [[ orm ]]，遵循 `route -> service -> repository -> async database`。
-- **Transactions**: repository 只执行 `flush()` / `refresh()`；session manager 负责 `commit()` / `rollback()`。
-[% endif %]
-[% if agent_capability == "pydantic-ai" %]- **Agent** (`app/agents/assistant.py`): Pydantic AI agent and caller-owned runtime dependencies.
-- **Agent invocation** (`app/services/agent.py`): Shared single-turn JSON/SSE invocation semantics.
-- **Model interface**: Configure only `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL`.
-[% endif %]
-[% if telemetry == "logfire" %]- **Telemetry**: Logfire 观测已选择的 HTTP[% if database == "postgresql" %]、数据库[% endif %][% if background_tasks == "taskiq" %]、Taskiq[% endif %][% if agent_capability == "pydantic-ai" %] 和 Agent[% endif %] 路径；模型内容采集保持关闭。
-[% endif %]
-
-All business routes are protected by a deployment-level API key. Health probes (`/health/live`, `/health/ready`) are public.
-
-### Error Format
-
-All errors are returned in a uniform envelope:
-
-```json
-{
-  "error": {
-    "code": "NOT_FOUND",
-    "message": "Resource not found",
-    "details": {}
-  }
-}
-```
-
-### Pagination
-
-Collection endpoints accept `offset` and `limit` query parameters and return a paginated response.
+- I/O 和生命周期路径使用 async。
+- 不引入 V1 已排除的产品能力或测试专用/demo route。
+- 测试后清理 `app.dependency_overrides`；通过公开接口验证行为，不 mock 内部实现细节。

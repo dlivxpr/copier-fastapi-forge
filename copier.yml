@@ -11,44 +11,93 @@ _exclude: []
 
 project_name:
   type: str
-  help: Human-readable project name
-  default: "FastAPI Service"
+  help: Python project name
+  default: "my_project"
+  validator: "[% if not (project_name | regex_search('^[a-z][a-z0-9_]*$')) %]Use lowercase letters, digits, and underscores; start with a letter[% endif %]"
 
 project_slug:
   type: str
-  help: Python-safe project name
-  default: "fastapi-service"
+  help: Generated project directory and package name
+  default: "[[ project_name.lower().replace('-', '_') ]]"
+  validator: "[% if not (project_slug | regex_search('^[a-z][a-z0-9_]*$')) %]Use lowercase letters, digits, and underscores; start with a letter[% endif %]"
 
 project_description:
   type: str
   help: Short description of the service
-  default: "A FastAPI backend service"
+  default: "A FastAPI project"
 
-module_name:
+author_name:
   type: str
-  help: Python module name (PEP 508 normalized)
-  default: "[[ project_slug | replace('-', '_') | replace(' ', '_') | lower ]]"
+  help: Project author name
+  default: "Your Name"
+
+author_email:
+  type: str
+  help: Project author email
+  default: "your@email.com"
+
+timezone:
+  type: str
+  help: IANA timezone
+  default: "UTC"
 
 python_version:
   type: str
-  help: Minimum Python version
-  default: "3.11"
+  help: Python version
+  choices:
+    Python 3.12: "3.12"
+    Python 3.13: "3.13"
+    Python 3.14: "3.14"
+  default: "3.12"
+
+backend_port:
+  type: int
+  help: Backend server port
+  default: 8000
+  validator: "[% if backend_port < 1 or backend_port > 65535 %]Must be between 1 and 65535[% endif %]"
 
 database:
   type: str
   help: Persistence backend
   choices:
-    No database: none
     PostgreSQL: postgresql
-  default: none
+    No database: none
+  default: postgresql
 
-orm:
+orm_type:
   type: str
   help: PostgreSQL ORM
   choices:
     SQLAlchemy: sqlalchemy
     SQLModel: sqlmodel
   default: sqlalchemy
+  when: "[[ database == 'postgresql' ]]"
+
+db_pool_size:
+  type: int
+  help: Database connection pool size
+  default: 5
+  when: "[[ database == 'postgresql' ]]"
+  validator: "[% if db_pool_size < 1 %]Must be at least 1[% endif %]"
+
+db_max_overflow:
+  type: int
+  help: Database connection pool overflow
+  default: 10
+  when: "[[ database == 'postgresql' ]]"
+  validator: "[% if db_max_overflow < 0 %]Must be at least 0[% endif %]"
+
+db_pool_timeout:
+  type: int
+  help: Database connection pool timeout in seconds
+  default: 30
+  when: "[[ database == 'postgresql' ]]"
+  validator: "[% if db_pool_timeout < 1 %]Must be at least 1[% endif %]"
+
+include_example_crud:
+  type: bool
+  help: Generate the optional Item CRUD example
+  default: false
   when: "[[ database == 'postgresql' ]]"
 
 background_tasks:
@@ -59,23 +108,65 @@ background_tasks:
     Taskiq: taskiq
   default: none
 
-agent_capability:
+enable_redis:
+  type: bool
+  help: Enable the shared application Redis client
+  default: false
+
+enable_caching:
+  type: bool
+  help: Enable Redis-backed caching
+  default: false
+  validator: "[% if enable_caching and not enable_redis %]Caching requires enable_redis[% endif %]"
+
+enable_rate_limiting:
+  type: bool
+  help: Enable HTTP rate limiting
+  default: false
+
+rate_limit_requests:
+  type: int
+  help: Requests allowed in each rate limit window
+  default: 100
+  when: "[[ enable_rate_limiting ]]"
+  validator: "[% if rate_limit_requests < 1 %]Must be at least 1[% endif %]"
+
+rate_limit_period:
+  type: int
+  help: Rate limit window length in seconds
+  default: 60
+  when: "[[ enable_rate_limiting ]]"
+  validator: "[% if rate_limit_period < 1 %]Must be at least 1[% endif %]"
+
+rate_limit_storage:
   type: str
-  help: Single-turn agent capability
+  help: Rate limit state storage
   choices:
+    Process memory: memory
+    Shared Redis: redis
+  default: memory
+  when: "[[ enable_rate_limiting ]]"
+  validator: "[% if rate_limit_storage == 'redis' and not enable_redis %]Redis rate limiting requires enable_redis[% endif %]"
+
+ai_framework:
+  type: str
+  help: AI agent framework
+  choices:
+    Pydantic AI: pydantic_ai
     No agent: none
-    Pydantic AI: pydantic-ai
-  default: none
+  default: pydantic_ai
 
-telemetry:
-  type: str
-  help: Observability integration
-  choices:
-    No telemetry: none
-    Logfire: logfire
-  default: none
+enable_logfire:
+  type: bool
+  help: Enable Logfire observability
+  default: true
 
-docker:
+enable_cors:
+  type: bool
+  help: Enable CORS middleware
+  default: true
+
+enable_docker:
   type: bool
   help: Generate Docker deployment assets
   default: true
@@ -84,49 +175,21 @@ reverse_proxy:
   type: str
   help: External reverse proxy configuration
   choices:
+    External Nginx: nginx_external
     No reverse proxy: none
-    Nginx: nginx
-  default: none
-  when: "[[ docker ]]"
+  default: nginx_external
+  when: "[[ enable_docker ]]"
 
-ci:
+ci_type:
   type: str
   help: Continuous integration provider
   choices:
-    No CI: none
     GitHub Actions: github
+    No CI: none
   default: github
-
-enable_caching:
-  type: bool
-  help: Enable Redis-backed HTTP response caching
-  default: false
-
-rate_limiting:
-  type: str
-  help: HTTP rate limiting
-  choices:
-    Disabled: none
-    Process memory: memory
-    Shared Redis: redis
-  default: none
-
-rate_limit_requests:
-  type: int
-  help: Requests allowed in each rate limit window
-  default: 100
-  when: "[[ rate_limiting != 'none' ]]"
-  validator: "[% if rate_limit_requests < 1 %]Must be at least 1[% endif %]"
-
-rate_limit_period_seconds:
-  type: int
-  help: Rate limit window length in seconds
-  default: 60
-  when: "[[ rate_limiting != 'none' ]]"
-  validator: "[% if rate_limit_period_seconds < 1 %]Must be at least 1[% endif %]"
 
 deployment_api_key:
   type: str
   secret: true
   help: Deployment API key shared by all callers
-  default: "dev-key-CHANGEME"
+  default: "change-me-in-production"

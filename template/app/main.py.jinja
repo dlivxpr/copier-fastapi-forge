@@ -1,71 +1,62 @@
-from __future__ import annotations
+"""FastAPI application entry point."""
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-[% if enable_caching %]from fastapi_cache import FastAPICache
-from fastapi_cache.backends.redis import RedisBackend
+[% if enable_cors %]from starlette.middleware.cors import CORSMiddleware
 [% endif %]
 from app.api.exception_handlers import register_exception_handlers
-from app.api.router import router
-from app.core.config import Settings
-[% if rate_limiting != "none" %]from app.core.rate_limit import RateLimiter
-[% endif %][% if background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]from app.core.redis import redis_resources
-[% endif %][% if telemetry == "logfire" %]from app.core.telemetry import instrument_http
-[% endif %][% if database == "postgresql" %]from app.db.session import database
+from app.api.health import router as health_router
+from app.api.router import api_router
+from app.core.config import settings
+from app.core.logging import setup_logging
+from app.core.middleware import RequestIDMiddleware
+[% if database == "postgresql" %]from app.db.session import database
 [% endif %]
-settings = Settings()
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Initialize and tear down shared resources."""
-[% if database == "postgresql" %]    database.initialize(settings.database_url)
-[% endif %][% if background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]    redis_resources.initialize(settings.redis_url)
-[% endif %][% if enable_caching %]    FastAPICache.init(RedisBackend(redis_resources.client), prefix="service-cache")
-[% endif %][% if rate_limiting != "none" %]    app.state.rate_limiter = RateLimiter(
-        limit=settings.rate_limit_requests,
-        period_seconds=settings.rate_limit_period_seconds,
-[% if rate_limiting == "redis" %]        redis_client=redis_resources.client,
-[% endif %]    )
-[% endif %]    try:
+    """Initialize and close resources owned by the API process."""
+[% if database == "postgresql" %]    database.initialize(settings.DATABASE_URL)
+    try:
         yield
     finally:
-[% if background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]        await redis_resources.close()
-[% endif %][% if database == "postgresql" %]        await database.close()
-[% endif %][% if database != "postgresql" and background_tasks != "taskiq" and not enable_caching and rate_limiting != "redis" %]        pass
+        await database.close()
+[% else %]    yield
 [% endif %]
 
-app = FastAPI(
-    title="[[ project_name ]]",
-    description="[[ project_description ]]",
-    lifespan=lifespan,
-)
-[% if telemetry == "logfire" %]instrument_http(app)
-[% endif %]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[o.strip() for o in settings.cors_origins.split(",")],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-register_exception_handlers(app)
-app.include_router(router, prefix="/api/v1")
+SHOW_DOCS_ENVIRONMENTS = ("local", "staging", "development")
 
 
-@app.get("/health/live")
-async def liveness() -> dict[str, str]:
-    return {"status": "alive"}
+def create_app() -> FastAPI:
+    """Create and configure the FastAPI application."""
+    show_docs = settings.ENVIRONMENT in SHOW_DOCS_ENVIRONMENTS
+    setup_logging()
+    app = FastAPI(
+        title=settings.PROJECT_NAME,
+        summary="FastAPI application",
+        description="[[ project_description ]]",
+        version="0.1.0",
+        openapi_url=f"{settings.API_V1_STR}/openapi.json" if show_docs else None,
+        docs_url="/docs" if show_docs else None,
+        redoc_url="/redoc" if show_docs else None,
+        contact={"name": "[[ author_name ]]", "email": "[[ author_email ]]"},
+        license_info={"name": "MIT", "identifier": "MIT"},
+        lifespan=lifespan,
+    )
+    app.add_middleware(RequestIDMiddleware)
+    register_exception_handlers(app)
+[% if enable_cors %]    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.CORS_ORIGINS,
+        allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
+        allow_methods=settings.CORS_ALLOW_METHODS,
+        allow_headers=settings.CORS_ALLOW_HEADERS,
+    )
+[% endif %]    app.include_router(health_router)
+    app.include_router(api_router, prefix=settings.API_V1_STR)
+    return app
 
 
-@app.get("/health/ready")
-async def readiness() -> dict[str, str]:
-[% if database == "postgresql" %]
-    await database.check_connection()
-[% endif %]
-    return {"status": "ready"}
+app = create_app()

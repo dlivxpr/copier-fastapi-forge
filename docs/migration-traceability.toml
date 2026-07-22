@@ -1,0 +1,105 @@
+# Issue #7 减法迁移追溯。每个 target 必须在等价 manifest 中登记内容摘要。
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/pyproject.toml"
+target = "pyproject.toml"
+allowed_transformations = ["Copier 模板语法", "backend 移至项目根", "删除 V1 排除依赖", "依赖兼容修改"]
+removed_references = ["用户/JWT、frontend、分页、替代队列与 telemetry 依赖"]
+approved_deviation = ["deployment API Key 固定启用", "FastAPI <0.137 以保留 legacy routes CLI；runtime smoke 复现 0.137 lazy router 不兼容"]
+verification = ["test_minimal_answers_render_deterministic_project_metadata", "test_minimal_project_passes_http_and_cli_runtime_contract"]
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/.env.example"
+target = ".env.example"
+allowed_transformations = ["Copier 模板语法", "删除关闭能力的环境变量"]
+removed_references = ["JWT、用户、frontend、文件、RAG 与其他删除能力变量"]
+approved_deviation = ["LLM_* 使用批准的 OpenAI Chat Completions-compatible 接口"]
+verification = ["test_minimal_tree_contains_only_legacy_core_service"]
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/main.py"
+target = "app/main.py"
+allowed_transformations = ["Copier 模板语法", "删除 V1 排除生命周期", "关闭能力条件化"]
+removed_references = ["分页、SecurityHeaders、用户/JWT、RAG、消息渠道、admin"]
+approved_deviation = ["health probes 挂载到公开根路径", "Logfire 仅由后续 Agent slice 接入"]
+verification = ["test_minimal_project_passes_http_and_cli_runtime_contract"]
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/core/config.py"
+target = "app/core/config.py"
+allowed_transformations = ["Copier 模板语法", "删除能力字段", "可选基础设施条件化"]
+removed_references = ["身份、frontend、billing、文件、RAG、provider 与删除能力 Settings"]
+approved_deviation = ["deployment API Key 替代用户/JWT", "LLM_* 使用批准的单一模型接口"]
+verification = ["test_minimal_project_passes_http_and_cli_runtime_contract"]
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/core/exceptions.py"
+target = "app/core/exceptions.py"
+allowed_transformations = ["删除身份与排除能力异常", "可选能力条件化"]
+removed_references = ["AuthenticationError、AuthorizationError、PaymentRequiredError"]
+approved_deviation = ["APIKeyMissingError 与 InvalidAPIKeyError 承载 deployment API Key 边界"]
+verification = ["test_minimal_project_passes_http_and_cli_runtime_contract"]
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/core/logging.py"
+target = "app/core/logging.py"
+allowed_transformations = ["删除用户/JWT 脱敏模式", "保留凭据脱敏"]
+removed_references = ["email、JWT、Bearer、refresh token 模式"]
+approved_deviation = ["类名明确为 SecretRedactionFilter"]
+verification = ["test_minimal_tree_contains_only_legacy_core_service"]
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/core/middleware.py"
+target = "app/core/middleware.py"
+allowed_transformations = ["删除未接线 SecurityHeaders"]
+removed_references = ["SecurityHeadersMiddleware"]
+approved_deviation = ["无其他差异"]
+verification = ["test_minimal_project_passes_http_and_cli_runtime_contract"]
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/api/deps.py"
+target = "app/api/deps.py"
+allowed_transformations = ["删除身份与未启用能力依赖", "deployment API Key 替换"]
+removed_references = ["CurrentUser、JWT、分页、Resource service dependencies"]
+approved_deviation = ["deployment API Key 始终启用且使用 constant-time compare"]
+verification = ["test_minimal_project_passes_http_and_cli_runtime_contract"]
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/api/exception_handlers.py"
+target = "app/api/exception_handlers.py"
+allowed_transformations = ["删除 WebSocket 分支", "删除 JWT challenge"]
+removed_references = ["HTTPConnection WebSocket handling", "WWW-Authenticate: Bearer"]
+approved_deviation = ["deployment API Key 错误不发送 Bearer challenge"]
+verification = ["test_minimal_project_passes_http_and_cli_runtime_contract"]
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/api/routes/v1/health.py"
+target = "app/api/health.py"
+allowed_transformations = ["根路径迁移", "删除关闭资源 probes"]
+removed_references = ["database、Redis、RAG、LLM provider、billing、Celery probes 与 /ready alias"]
+approved_deviation = ["无基础设施 minimal readiness 返回空 checks"]
+verification = ["test_minimal_project_passes_http_and_cli_runtime_contract"]
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/schemas/base.py"
+target = "app/schemas/base.py"
+allowed_transformations = ["删除未使用 schema"]
+removed_references = ["TimestampSchema、AgentModelsResponse 与通用 response schema"]
+approved_deviation = ["仅保留 health response contract"]
+verification = ["test_minimal_project_passes_http_and_cli_runtime_contract"]
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/services/health.py"
+target = "app/services/health.py"
+allowed_transformations = ["根目录迁移"]
+removed_references = ["无"]
+approved_deviation = ["无差异"]
+verification = ["test_minimal_project_passes_http_and_cli_runtime_contract"]
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/cli/commands.py"
+target = "cli/commands.py"
+allowed_transformations = ["Copier 模板语法", "删除未启用能力命令"]
+removed_references = ["用户、Celery、database 与 Taskiq commands（后两者由后续 slice 恢复）"]
+approved_deviation = ["server commands 始终生成"]
+verification = ["test_minimal_project_passes_http_and_cli_runtime_contract"]

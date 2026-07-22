@@ -1,0 +1,12 @@
+# [[ project_name ]]
+
+[[ project_description ]]
+
+## 本地运行
+
+```bash
+uv sync --all-groups
+uv run [[ project_slug ]] server run --port [[ backend_port ]]
+```
+
+公开探针：`/health`、`/health/live`、`/health/ready`。业务 API 使用 `X-API-Key` 请求头。

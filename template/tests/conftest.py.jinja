@@ -4,11 +4,7 @@ from collections.abc import AsyncIterator, Iterator
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-[% if database == "postgresql" %]from sqlalchemy import delete
 
-from app.db.session import database
-from app.models.resource import Resource
-[% endif %]
 
 @pytest.fixture(scope="session")
 def anyio_backend() -> str:
@@ -28,17 +24,10 @@ async def client() -> AsyncIterator[AsyncClient]:
     from app.main import app
 
     async with app.router.lifespan_context(app):
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as c:
-            yield c
-[% if database == "postgresql" %]
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            yield client
 
-@pytest.fixture(autouse=True)
-async def clean_database(client: AsyncClient) -> None:
-    async with database.session() as session:
-[% if orm == "sqlalchemy" %]        await session.execute(delete(Resource))
-[% else %]        await session.exec(delete(Resource))
-[% endif %][% endif %]
 
 @pytest.fixture
 def valid_key() -> str:

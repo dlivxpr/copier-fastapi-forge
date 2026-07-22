@@ -1,25 +1,123 @@
-from __future__ import annotations
+"""Application configuration using Pydantic BaseSettings."""
 
-[% if agent_capability == "pydantic-ai" %]from pydantic import AnyHttpUrl, SecretStr
-[% endif %]from pydantic_settings import BaseSettings, SettingsConfigDict
+from pathlib import Path
+from typing import Literal
+
+from pydantic import ValidationInfo, [% if database == "postgresql" or enable_redis %]computed_field, [% endif %]field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def find_env_file() -> Path | None:
+    """Find .env in the generated project root or its direct child."""
+    current = Path.cwd()
+    for path in (current, current.parent):
+        env_file = path / ".env"
+        if env_file.exists():
+            return env_file
+    return None
 
 
 class Settings(BaseSettings):
+    """Application settings."""
+
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
+        env_file=find_env_file(),
+        env_ignore_empty=True,
+        extra="ignore",
     )
 
-    api_key: str = "[[ deployment_api_key ]]"
-    cors_origins: str = "*"
-    host: str = "0.0.0.0"
-    port: int = 8000
-[% if agent_capability == "pydantic-ai" %]    llm_base_url: AnyHttpUrl = AnyHttpUrl("https://api.example.com/v1")
-    llm_api_key: SecretStr = SecretStr("model-key-CHANGEME")
-    llm_model: str = "model-name-CHANGEME"
-[% endif %][% if background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]    redis_url: str = "redis://127.0.0.1:6379/0"
-[% endif %][% if rate_limiting != "none" %]    rate_limit_requests: int = [[ rate_limit_requests ]]
-    rate_limit_period_seconds: int = [[ rate_limit_period_seconds ]]
-[% endif %][% if database == "postgresql" %]    database_url: str = "postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/app"
-[% endif -%]
+    PROJECT_NAME: str = "[[ project_name ]]"
+    API_V1_STR: str = "/api/v1"
+    DEBUG: bool = False
+    ENVIRONMENT: Literal["development", "local", "staging", "production"] = "local"
+    TIMEZONE: str = "[[ timezone ]]"
+    MAX_UPLOAD_SIZE_MB: int = 50
+[% if database == "postgresql" %]
+    DB_ECHO: bool = False
+    POSTGRES_HOST: str = "localhost"
+    POSTGRES_PORT: int = 5432
+    POSTGRES_USER: str = "postgres"
+    POSTGRES_PASSWORD: str = ""
+    POSTGRES_DB: str = "[[ project_slug ]]"
+    DB_POOL_SIZE: int = [[ db_pool_size ]]
+    DB_MAX_OVERFLOW: int = [[ db_max_overflow ]]
+    DB_POOL_TIMEOUT: int = [[ db_pool_timeout ]]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def DATABASE_URL(self) -> str:
+        return (
+            f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def DATABASE_URL_SYNC(self) -> str:
+        return (
+            f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
+[% endif %]
+    API_KEY: str = "[[ deployment_api_key ]]"
+    API_KEY_HEADER: str = "X-API-Key"
+
+    @field_validator("API_KEY")
+    @classmethod
+    def validate_api_key(cls, value: str, info: ValidationInfo) -> str:
+        environment = info.data.get("ENVIRONMENT", "local") if info.data else "local"
+        if value == "change-me-in-production" and environment == "production":
+            raise ValueError(
+                "API_KEY must be changed in production! "
+                "Generate a secure key with: openssl rand -hex 32"
+            )
+        return value
+[% if enable_redis %]
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_PASSWORD: str | None = None
+    REDIS_DB: int = 0
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def REDIS_URL(self) -> str:
+        if self.REDIS_PASSWORD:
+            return (
+                f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:"
+                f"{self.REDIS_PORT}/{self.REDIS_DB}"
+            )
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+[% endif %][% if enable_rate_limiting %]
+    RATE_LIMIT_REQUESTS: int = [[ rate_limit_requests ]]
+    RATE_LIMIT_PERIOD: int = [[ rate_limit_period ]]
+    RATE_LIMIT_STORAGE: str = "[[ rate_limit_storage ]]"
+[% endif %][% if ai_framework == "pydantic_ai" %]
+    LLM_BASE_URL: str = "https://api.example.com/v1"
+    LLM_API_KEY: str = "model-key-CHANGEME"
+    LLM_MODEL: str = "model-name-CHANGEME"
+[% endif %][% if enable_logfire %]
+    LOGFIRE_TOKEN: str | None = None
+    LOGFIRE_SERVICE_NAME: str = "[[ project_slug ]]"
+    LOGFIRE_ENVIRONMENT: str = "development"
+[% endif %][% if enable_cors %]
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:8080",
+    ]
+    CORS_ALLOW_CREDENTIALS: bool = True
+    CORS_ALLOW_METHODS: list[str] = ["*"]
+    CORS_ALLOW_HEADERS: list[str] = ["*"]
+
+    @field_validator("CORS_ORIGINS")
+    @classmethod
+    def validate_cors_origins(cls, value: list[str], info: ValidationInfo) -> list[str]:
+        environment = info.data.get("ENVIRONMENT", "local") if info.data else "local"
+        if "*" in value and environment == "production":
+            raise ValueError(
+                "CORS_ORIGINS cannot contain '*' in production! "
+                "Specify explicit allowed origins."
+            )
+        return value
+[% endif %]
+
+settings = Settings()

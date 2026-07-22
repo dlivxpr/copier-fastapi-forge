@@ -1,0 +1,15 @@
+# 受保护摘要只能在新增批准差异与独立验收后人工更新。
+[protected]
+"pyproject.toml" = { legacy_sha256 = "05a73c574386fb890cec8ebed44ccbce9cae9752a26d82bff50f5f52aa49e709", target_sha256 = "001cf313136b359006df07824637f2e6ecaad2981083f6d0391a2bc86f1827d5" }
+".env.example" = { legacy_sha256 = "7b13e2024d77aa05930fbb7e2557e71e5996e48ac422cbb59a667191bd816b6e", target_sha256 = "fe73177f24179052beccf97130318c16983406cc018353facc4fca462ee20f21" }
+"app/main.py" = { legacy_sha256 = "1f7f2f98fc01bdfa4ccfca7a92b6025689de753392a0b0e3738363c50ce19dc3", target_sha256 = "8eae2d13fe5509e8e024f57b5131ac13e480da82010331c5d00b266ba418c230" }
+"app/core/config.py" = { legacy_sha256 = "4b98fbe04305dc4551861dbfad02a0620d84b95599f129628c76dd4e08d3fb06", target_sha256 = "2bc15d2640b031af363bfb94d02c70d072c6066f2e9c03d9b65edbf12f917658" }
+"app/core/exceptions.py" = { legacy_sha256 = "0d131a4820f06a3c657620b9df48092c76ec83835ea9d61d6adef306ae62e084", target_sha256 = "36b8669974618a6ccff7db20c6f2813030972c12237f1e0c7afb2ed225e7bbd2" }
+"app/core/logging.py" = { legacy_sha256 = "ed31585d778d01ae549cd2df7f62be930645aa2fd52788c82ccb4ba66f07e92c", target_sha256 = "54e2687b9d3197dae4687ad883794595288e7ba9052651e1eac0476d58f7d70c" }
+"app/core/middleware.py" = { legacy_sha256 = "85810e7f8e6661cf4f46b6b288edd739dd1c74b336198612efaa35262bfab544", target_sha256 = "a473350aeca522a624f743fd1439b324f3fb04f6f7bf93a1273b54034cc34887" }
+"app/api/deps.py" = { legacy_sha256 = "1aa4ea58d80f09e32de551b06b11512913c4911253f077eb581d9a9e6a461f23", target_sha256 = "b4b2f96d0f664f4a11585e04487d5de719e6b7afce448acb0e34da6507515b16" }
+"app/api/exception_handlers.py" = { legacy_sha256 = "1460db56c3be533bd666d7272d6ea3a195cf65a85973d3b5de9fedab396117a7", target_sha256 = "4df4ce5dd267a27cd9ded35762ebc3f59cedee689b74622546f916d3c4ebbd2d" }
+"app/api/health.py" = { legacy_sha256 = "13b20cd68467b0bc91afc5d75132395e8e36b48a1f31b31ce04375deb6f2ccd6", target_sha256 = "a81c7a0f032ce73986872ea53679ec7c85e222acac338ddb3c8442e4e33d6925" }
+"app/schemas/base.py" = { legacy_sha256 = "b682bbc722d1579b63f3b60a3ff6e0d3a130459e2faa8790d1ea852575686d61", target_sha256 = "050e34c3d72a8f3ed638780c9009b06ee5764137039e1650fae3577e228eb1cd" }
+"app/services/health.py" = { legacy_sha256 = "14b32dde6802b978594b4efb6f1a54a31bbfaee345bd854e0441974ba0754f7a", target_sha256 = "3f118e1447eb1905f4ecda5a3c337016b0d6aa5b639d1c872a938ae77a58b991" }
+"cli/commands.py" = { legacy_sha256 = "4032a5c7a9605b52c4479eb54cf4a46bdfd5420ecdc7063d328d5d2017a41b8d", target_sha256 = "9ab9e5aa8c926acb1591f76bcc9e73290ac2bcaaf9e2609d361cae79b8c5834b" }

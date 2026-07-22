@@ -1,171 +1,67 @@
 from __future__ import annotations
 
-[% if database == "postgresql" %]from uuid import uuid4
-
-[% endif %]import pytest
+import pytest
+from fastapi import APIRouter, Depends
 from httpx import AsyncClient
+
+from app.api.deps import verify_api_key
+from app.core.exceptions import NotFoundError
+from app.main import app
 
 pytestmark = pytest.mark.anyio
 
-
-async def test_liveness_unauthenticated(client: AsyncClient) -> None:
-    response = await client.get("/health/live")
-    assert response.status_code == 200
-    assert response.json() == {"status": "alive"}
-
-
-async def test_readiness_unauthenticated(client: AsyncClient) -> None:
-    response = await client.get("/health/ready")
-    assert response.status_code == 200
-    assert response.json() == {"status": "ready"}
+contract_router = APIRouter(
+    prefix="/api/v1",
+    dependencies=[Depends(verify_api_key)],
+)
 
 
-async def test_business_route_rejected_without_api_key(client: AsyncClient) -> None:
-    response = await client.get("/api/v1/hello")
-    assert response.status_code == 401
-    body = response.json()
-    assert body["error"]["code"] == "UNAUTHORIZED"
+@contract_router.get("/contract-error")
+async def contract_error() -> None:
+    raise NotFoundError(details={"resource": "contract"})
 
 
-async def test_business_route_rejected_with_wrong_api_key(client: AsyncClient) -> None:
-    response = await client.get("/api/v1/hello", headers={"X-API-Key": "wrong-key"})
-    assert response.status_code == 401
-    body = response.json()
-    assert body["error"]["code"] == "UNAUTHORIZED"
+app.include_router(contract_router)
 
 
-async def test_business_route_accepted_with_valid_key(
-    client: AsyncClient, api_key_headers: dict[str, str]
+async def test_health_contract_is_public(client: AsyncClient) -> None:
+    health = await client.get("/health")
+    assert health.status_code == 200
+    assert health.json() == {"status": "healthy", "max_upload_size_mb": 50}
+
+    live = await client.get("/health/live")
+    assert live.status_code == 200
+    assert live.json()["status"] == "alive"
+    assert live.json()["service"] == "[[ project_name ]]"
+    assert "timestamp" in live.json()
+
+    ready = await client.get("/health/ready")
+    assert ready.status_code == 200
+    assert ready.json()["status"] == "ready"
+
+
+async def test_business_route_requires_deployment_api_key(
+    client: AsyncClient,
+    api_key_headers: dict[str, str],
 ) -> None:
-    response = await client.get("/api/v1/hello", headers=api_key_headers)
-    assert response.status_code == 200
-    assert response.json()["message"] == "Hello, world!"
+    missing = await client.get("/api/v1/contract-error")
+    assert missing.status_code == 401
+    assert missing.json()["error"]["code"] == "AUTHENTICATION_ERROR"
+    assert "www-authenticate" not in missing.headers
 
-
-async def test_hello_accepts_name_param(
-    client: AsyncClient, api_key_headers: dict[str, str]
-) -> None:
-    response = await client.get("/api/v1/hello?name=Alice", headers=api_key_headers)
-    assert response.status_code == 200
-    assert response.json()["message"] == "Hello, Alice!"
-
-
-async def test_error_envelope_on_not_found(
-    client: AsyncClient, api_key_headers: dict[str, str]
-) -> None:
-    response = await client.get("/api/v1/items/nonexistent", headers=api_key_headers)
-    assert response.status_code == 404
-    body = response.json()
-    assert body["error"]["code"] == "NOT_FOUND"
-    assert "Item" in body["error"]["message"]
-    assert body["error"]["details"]["resource"] == "Item"
-    assert body["error"]["details"]["identifier"] == "nonexistent"
-
-
-async def test_cors_headers_present_on_preflight(client: AsyncClient) -> None:
-    response = await client.options(
-        "/health/live",
-        headers={
-            "Origin": "https://example.com",
-            "Access-Control-Request-Method": "GET",
-        },
+    invalid = await client.get(
+        "/api/v1/contract-error",
+        headers={"X-API-Key": "invalid"},
     )
-    assert response.status_code == 200
-    assert "access-control-allow-origin" in response.headers
-[% if database == "postgresql" %]
+    assert invalid.status_code == 403
+    assert invalid.json()["error"]["code"] == "AUTHORIZATION_ERROR"
 
-async def test_resource_routes_require_api_key(client: AsyncClient) -> None:
-    response = await client.get("/api/v1/resources")
-    assert response.status_code == 401
-    assert response.json()["error"]["code"] == "UNAUTHORIZED"
-
-
-async def test_resource_crud_and_pagination_contract(
-    client: AsyncClient, api_key_headers: dict[str, str]
-) -> None:
-    names = [f"resource-{uuid4()}" for _ in range(3)]
-    created = []
-    for index, name in enumerate(names):
-        response = await client.post(
-            "/api/v1/resources",
-            headers=api_key_headers,
-            json={"name": name, "description": f"description-{index}"},
-        )
-        assert response.status_code == 201
-        created.append(response.json())
-
-    page = await client.get(
-        "/api/v1/resources?offset=1&limit=2",
-        headers=api_key_headers,
-    )
-    assert page.status_code == 200
-    assert page.json()["total"] == 3
-    assert page.json()["offset"] == 1
-    assert page.json()["limit"] == 2
-    assert len(page.json()["items"]) == 2
-
-    resource_id = created[0]["id"]
-    fetched = await client.get(f"/api/v1/resources/{resource_id}", headers=api_key_headers)
-    assert fetched.status_code == 200
-    assert fetched.json()["name"] == names[0]
-
-    updated = await client.patch(
-        f"/api/v1/resources/{resource_id}",
-        headers=api_key_headers,
-        json={"description": "updated"},
-    )
-    assert updated.status_code == 200
-    assert updated.json()["description"] == "updated"
-
-    deleted = await client.delete(
-        f"/api/v1/resources/{resource_id}",
-        headers=api_key_headers,
-    )
-    assert deleted.status_code == 204
-
-    missing = await client.get(f"/api/v1/resources/{resource_id}", headers=api_key_headers)
-    assert missing.status_code == 404
-    assert missing.json()["error"]["code"] == "NOT_FOUND"
-
-
-async def test_duplicate_update_rolls_back_persistent_state(
-    client: AsyncClient, api_key_headers: dict[str, str]
-) -> None:
-    first_name = f"resource-{uuid4()}"
-    second_name = f"resource-{uuid4()}"
-    first = await client.post(
-        "/api/v1/resources",
-        headers=api_key_headers,
-        json={"name": first_name},
-    )
-    second = await client.post(
-        "/api/v1/resources",
-        headers=api_key_headers,
-        json={"name": second_name},
-    )
-    assert first.status_code == 201
-    assert second.status_code == 201
-
-    second_id = second.json()["id"]
-    duplicate = await client.patch(
-        f"/api/v1/resources/{second_id}",
-        headers=api_key_headers,
-        json={"name": first_name},
-    )
-    assert duplicate.status_code == 409
-    assert duplicate.json()["error"]["code"] == "CONFLICT"
-
-    persisted = await client.get(
-        f"/api/v1/resources/{second_id}",
-        headers=api_key_headers,
-    )
-    assert persisted.status_code == 200
-    assert persisted.json()["name"] == second_name
-
-    after_failure = await client.post(
-        "/api/v1/resources",
-        headers=api_key_headers,
-        json={"name": f"resource-{uuid4()}"},
-    )
-    assert after_failure.status_code == 201
-[% endif -%]
+    known = await client.get("/api/v1/contract-error", headers=api_key_headers)
+    assert known.status_code == 404
+    assert known.json() == {
+        "error": {
+            "code": "NOT_FOUND",
+            "message": "Resource not found",
+            "details": {"resource": "contract"},
+        }
+    }

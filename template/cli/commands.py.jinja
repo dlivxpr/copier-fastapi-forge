@@ -1,0 +1,45 @@
+"""Project management CLI."""
+
+import click
+import uvicorn
+from tabulate import tabulate
+
+from app.main import app
+
+
+@click.group()
+@click.version_option(version="0.1.0", prog_name="[[ project_slug ]]")
+def cli() -> None:
+    """[[ project_name ]] management CLI."""
+
+
+@cli.group("server")
+def server_cli() -> None:
+    """Server commands."""
+
+
+@server_cli.command("run")
+@click.option("--host", default="0.0.0.0", help="Host to bind to")
+@click.option("--port", default=[[ backend_port ]], type=int, help="Port to bind to")
+@click.option("--reload", is_flag=True, help="Enable auto-reload")
+def server_run(host: str, port: int, reload: bool) -> None:
+    """Run the development server."""
+    uvicorn.run("app.main:app", host=host, port=port, reload=reload)
+
+
+@server_cli.command("routes")
+def server_routes() -> None:
+    """Show all registered routes."""
+    routes: list[list[str]] = []
+    for route in app.routes:
+        path = getattr(route, "path", None)
+        if path is None:
+            continue
+        methods = getattr(route, "methods", set())
+        for method in methods - {"HEAD", "OPTIONS"}:
+            routes.append([method, path, getattr(route, "name", "-")])
+    click.echo(tabulate(routes, headers=["Method", "Path", "Name"]))
+
+
+if __name__ == "__main__":
+    cli()

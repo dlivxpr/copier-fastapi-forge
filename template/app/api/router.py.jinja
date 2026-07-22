@@ -1,28 +1,7 @@
-from __future__ import annotations
+"""Protected business API router."""
 
 from fastapi import APIRouter
 
-[% if agent_capability == "pydantic-ai" %]from app.api.agent import router as agent_router
-[% endif %][% if enable_caching %]from app.api.cache import router as cache_router
-[% endif %]from app.api.deps import RequireApiKey
-[% if rate_limiting != "none" %]from app.api.rate_limit import router as rate_limit_router
-[% endif %][% if database == "postgresql" %]from app.api.resources import router as resources_router
-[% endif %]from app.core.exceptions import NotFoundError
+from app.api.deps import RequireApiKey
 
-router = APIRouter(dependencies=[RequireApiKey])
-[% if agent_capability == "pydantic-ai" %]router.include_router(agent_router)
-[% endif %][% if enable_caching %]router.include_router(cache_router)
-[% endif %][% if rate_limiting != "none" %]router.include_router(rate_limit_router)
-[% endif %][% if database == "postgresql" %]router.include_router(resources_router)
-[% endif %]
-
-@router.get("/hello")
-async def hello(name: str = "world") -> dict[str, str]:
-    """A simple greeting endpoint (API-key protected)."""
-    return {"message": f"Hello, {name}!"}
-
-
-@router.get("/items/{item_id}")
-async def get_item(item_id: str) -> dict[str, object]:
-    """Demonstrates the error envelope on a missing resource."""
-    raise NotFoundError(resource="Item", identifier=item_id)
+api_router = APIRouter(dependencies=[RequireApiKey])
