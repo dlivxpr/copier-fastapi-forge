@@ -3,28 +3,49 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-[% if enable_cors %]from starlette.middleware.cors import CORSMiddleware
+from fastapi import FastAPI[% if enable_rate_limiting %], Request[% endif %]
+[% if enable_rate_limiting %]from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIASGIMiddleware
+[% endif %][% if enable_cors %]from starlette.middleware.cors import CORSMiddleware
+[% endif %][% if enable_rate_limiting %]from starlette.responses import Response
 [% endif %]
-from app.api.exception_handlers import register_exception_handlers
+from app.api.exception_handlers import [% if enable_rate_limiting %]app_exception_handler, [% endif %]register_exception_handlers
 from app.api.health import router as health_router
 from app.api.router import api_router
-from app.core.config import settings
-from app.core.logging import setup_logging
+[% if enable_redis %]from app.clients.redis import RedisClient
+[% endif %][% if enable_caching %]from app.core.cache import close_cache, setup_cache
+[% endif %]from app.core.config import settings
+[% if enable_rate_limiting %]from app.core.exceptions import RateLimitError
+[% endif %]from app.core.logging import setup_logging
 from app.core.middleware import RequestIDMiddleware
-[% if database == "postgresql" %]from app.db.session import close_db
-[% endif -%]
-[% if enable_redis %]from app.core.redis import redis_resources
+[% if enable_rate_limiting %]from app.core.rate_limit import limiter
+[% endif %][% if database == "postgresql" %]from app.db.session import close_db
 [% endif -%]
 [[ "\n\n" -]]
+[% if enable_rate_limiting %]async def slowapi_exception_handler(
+    request: Request,
+    exc: Exception,
+) -> Response:
+    """Translate SlowAPI errors into the public error envelope."""
+    if not isinstance(exc, RateLimitExceeded):
+        raise exc
+    return await app_exception_handler(request, RateLimitError())
+
+
+[% endif -%]
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Initialize and close resources owned by the API process."""
-[% if enable_redis %]    redis_resources.initialize(settings.REDIS_URL)
+[% if enable_redis %]    redis = RedisClient()
+    await redis.connect()
+    app.state.redis = redis
+[% endif %][% if enable_caching %]    setup_cache(redis)
 [% endif %][% if database == "postgresql" or enable_redis %]    try:
         yield
     finally:
-[% if enable_redis %]        await redis_resources.close()
+[% if enable_caching %]        close_cache()
+[% endif %][% if enable_redis %]        await redis.close()
+        del app.state.redis
 [% endif %][% if database == "postgresql" %]        await close_db()
 [% endif %][% else %]    yield
 [% endif %]
@@ -50,6 +71,10 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(RequestIDMiddleware)
     register_exception_handlers(app)
+[% if enable_rate_limiting %]    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, slowapi_exception_handler)
+    app.add_middleware(SlowAPIASGIMiddleware)
+[% endif %]
 [% if enable_cors %]    app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.CORS_ORIGINS,

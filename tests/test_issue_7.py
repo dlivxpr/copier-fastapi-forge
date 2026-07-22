@@ -395,6 +395,9 @@ def _legacy_context(profile: dict[str, object]) -> dict[str, object]:
             "use_sqlmodel": profile.get("orm_type") == "sqlmodel",
             "use_pydantic_ai": profile["ai_framework"] == "pydantic_ai",
             "use_ai": profile["ai_framework"] == "pydantic_ai",
+            "use_taskiq": profile["background_tasks"] == "taskiq",
+            "rate_limit_storage_memory": profile.get("rate_limit_storage") == "memory",
+            "rate_limit_storage_redis": profile.get("rate_limit_storage") == "redis",
         }
     )
     return defaults
@@ -437,6 +440,22 @@ def test_migration_equivalence_manifest_rejects_unregistered_content(
             "database": "postgresql",
             "orm_type": "sqlmodel",
             "include_example_crud": True,
+        },
+        "redis_consumers": {
+            **base_profile,
+            "enable_redis": True,
+            "enable_caching": True,
+            "enable_rate_limiting": True,
+            "rate_limit_storage": "redis",
+        },
+        "rate_limit_memory": {
+            **base_profile,
+            "enable_rate_limiting": True,
+            "rate_limit_storage": "memory",
+        },
+        "taskiq": {
+            **base_profile,
+            "background_tasks": "taskiq",
         },
     }
 

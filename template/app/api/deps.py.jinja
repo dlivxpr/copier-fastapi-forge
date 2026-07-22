@@ -3,11 +3,13 @@
 import secrets
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends[% if enable_redis %], Request[% endif %]
 from fastapi.security import APIKeyHeader
 [% if database == "postgresql" %][% if orm_type == "sqlalchemy" %]from sqlalchemy.ext.asyncio import AsyncSession
 [% else %]from sqlmodel.ext.asyncio.session import AsyncSession
 [% endif %][% endif %]
+[% if enable_redis %]from app.clients.redis import RedisClient
+[% endif -%]
 from app.core.config import settings
 from app.core.exceptions import APIKeyMissingError, InvalidAPIKeyError
 [% if database == "postgresql" %]from app.db.session import get_db_session
@@ -30,4 +32,14 @@ ValidAPIKey = Annotated[str, Depends(verify_api_key)]
 RequireApiKey = Depends(verify_api_key)
 [% if database == "postgresql" %]
 DBSession = Annotated[AsyncSession, Depends(get_db_session, scope="function")]
+[% endif -%]
+[% if enable_redis %]
+
+def get_redis(request: Request) -> RedisClient:
+    """Return the Redis client owned by the API lifespan."""
+    redis: RedisClient = request.app.state.redis
+    return redis
+
+
+Redis = Annotated[RedisClient, Depends(get_redis)]
 [% endif -%]

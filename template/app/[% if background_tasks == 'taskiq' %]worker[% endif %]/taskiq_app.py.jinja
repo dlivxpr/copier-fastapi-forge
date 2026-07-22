@@ -1,0 +1,35 @@
+from __future__ import annotations
+
+from redis.asyncio import Redis
+from taskiq import TaskiqEvents, TaskiqScheduler, TaskiqState
+from taskiq.schedule_sources import LabelScheduleSource
+from taskiq_redis import ListQueueBroker, RedisAsyncResultBackend
+
+from app.core.config import settings
+[% if enable_logfire %]from app.core.telemetry import configure_telemetry
+[% endif -%]
+[[ "\n" -]]
+result_backend = RedisAsyncResultBackend(redis_url=settings.TASKIQ_RESULT_BACKEND_URL)
+broker = ListQueueBroker(url=settings.TASKIQ_BROKER_URL).with_result_backend(result_backend)
+scheduler = TaskiqScheduler(broker=broker, sources=[LabelScheduleSource(broker)])
+
+
+async def ping_redis_consumers() -> None:
+    """Fail when either Taskiq Redis consumer is unhealthy."""
+    async with Redis(connection_pool=broker.connection_pool) as broker_redis:
+        await broker_redis.ping()
+    async with Redis(connection_pool=result_backend.redis_pool) as result_redis:
+        await result_redis.ping()
+
+
+@broker.on_event(TaskiqEvents.CLIENT_STARTUP, TaskiqEvents.WORKER_STARTUP)
+async def startup(_state: TaskiqState) -> None:
+    """Configure integrations and validate Taskiq Redis connections."""
+[% if enable_logfire %]    configure_telemetry()
+[% endif %]    await ping_redis_consumers()
+
+
+@broker.on_event(TaskiqEvents.CLIENT_SHUTDOWN, TaskiqEvents.WORKER_SHUTDOWN)
+async def shutdown(_state: TaskiqState) -> None:
+    """Validate Redis before Taskiq closes its broker resources."""
+    await ping_redis_consumers()

@@ -1,5 +1,8 @@
 """Project management CLI."""
 
+[% if background_tasks == "taskiq" %]import subprocess
+
+[% endif -%]
 import click
 import uvicorn
 [% if database == "postgresql" %]from alembic.config import Config
@@ -90,6 +93,36 @@ def db_current() -> None:
 def db_history() -> None:
     """Show migration history."""
     command.history(Config("alembic.ini"))
+[% endif %][% if background_tasks == "taskiq" %]
+
+@cli.group("taskiq")
+def taskiq_cli() -> None:
+    """Taskiq process commands."""
+
+
+@taskiq_cli.command("worker")
+@click.option("--workers", default=2, type=int, help="Number of workers")
+@click.option("--reload", is_flag=True, help="Enable auto-reload")
+def taskiq_worker(workers: int, reload: bool) -> None:
+    """Start the Taskiq worker."""
+    command = [
+        "taskiq",
+        "worker",
+        "app.worker.taskiq_app:broker",
+        f"--workers={workers}",
+    ]
+    if reload:
+        command.append("--reload")
+    subprocess.run(command, check=True)
+
+
+@taskiq_cli.command("scheduler")
+def taskiq_scheduler() -> None:
+    """Start the Taskiq scheduler."""
+    subprocess.run(
+        ["taskiq", "scheduler", "app.worker.taskiq_app:scheduler"],
+        check=True,
+    )
 [% endif %]
 
 if __name__ == "__main__":

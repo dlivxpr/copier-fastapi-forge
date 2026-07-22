@@ -61,7 +61,13 @@ class BadRequestError(AppException):
     status_code = 400
 
 
-class ExternalServiceError(AppException):
+[% if enable_rate_limiting %]class RateLimitError(AppException):
+    message = "Rate limit exceeded"
+    code = "RATE_LIMIT_EXCEEDED"
+    status_code = 429
+
+
+[% endif %]class ExternalServiceError(AppException):
     message = "External service unavailable"
     code = "EXTERNAL_SERVICE_ERROR"
     status_code = 503
@@ -71,12 +77,6 @@ class ExternalServiceError(AppException):
     message = "Database error"
     code = "DATABASE_ERROR"
     status_code = 500
-
-
-[% endif %][% if enable_rate_limiting %]class RateLimitError(AppException):
-    message = "Rate limit exceeded"
-    code = "RATE_LIMIT_EXCEEDED"
-    status_code = 429
 
 
 [% endif %]class InternalError(AppException):

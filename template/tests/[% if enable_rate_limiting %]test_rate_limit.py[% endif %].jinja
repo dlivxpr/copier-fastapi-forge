@@ -1,0 +1,40 @@
+from __future__ import annotations
+
+import pytest
+from fastapi import Request
+from httpx import ASGITransport, AsyncClient
+
+from app.core.rate_limit import limiter, rate_limit_high, rate_limit_low, rate_limit_medium
+from app.main import app
+
+pytestmark = pytest.mark.anyio
+
+
+async def test_rate_limit_decorators_enforce_limits() -> None:
+    @rate_limit_low("1/minute")
+    async def limited(request: Request) -> str:
+        return "ok"
+
+    assert callable(rate_limit_medium())
+    assert callable(rate_limit_high())
+
+    app.add_api_route("/rate-limit-contract", limited, methods=["GET"])
+    route = app.router.routes[-1]
+    try:
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            first = await client.get("/rate-limit-contract")
+            second = await client.get("/rate-limit-contract")
+        assert first.status_code == 200
+        assert first.json() == "ok"
+        assert second.status_code == 429
+        assert second.json() == {
+            "error": {
+                "code": "RATE_LIMIT_EXCEEDED",
+                "message": "Rate limit exceeded",
+                "details": None,
+            }
+        }
+    finally:
+        app.router.routes.remove(route)
+        limiter.reset()

@@ -14,6 +14,11 @@
 - `alembic/`：PostgreSQL migration；通过 `uv run [[ project_slug ]] db ...` 管理。
 [% endif %][% if database == "postgresql" and include_example_crud %]- `app/db/models/item.py` → `app/repositories/item.py` → `app/services/item.py` → `app/api/items.py`：可选 Item CRUD。
 [% endif %]
+[% if enable_redis %]- `app/clients/redis.py`：API lifespan 拥有的 async Redis client；通过 `app.api.deps.Redis` 注入。
+[% endif %][% if enable_caching %]- `app/core/cache.py`：复用 API Redis client 的 FastAPICache backend。
+[% endif %][% if enable_rate_limiting %]- `app/core/rate_limit.py`：SlowAPI limiter 与 low/medium/high decorators。
+[% endif %][% if background_tasks == "taskiq" %]- `app/worker/taskiq_app.py`：独立 Taskiq broker、result backend 与 scheduler。
+[% endif %]
 
 ```bash
 uv sync --all-groups
@@ -35,6 +40,12 @@ uv run pytest
 - worker 使用 `get_worker_db_context()` 创建独立 engine 和 `NullPool`，退出时必须 dispose。
 - migration 使用 `uv run [[ project_slug ]] db upgrade` 执行；readiness 通过数据库 session 执行 `SELECT 1`。
 [% endif %][% if database == "postgresql" and include_example_crud %]- Item 仅提供 create/get/update/delete；不添加 owner/user 外键、list endpoint 或分页 schema。
+[% endif %]
+[% if enable_redis %]- Redis client 必须由 API lifespan `connect()`/`close()`；readiness 通过注入的 client 执行 `ping()`。
+[% endif %][% if enable_caching %]- FastAPICache 与 Redis client 共享 binary connection；shutdown 时调用 `FastAPICache.reset()`。
+[% endif %][% if enable_rate_limiting %]- Rate limiting 使用 [[ "Redis shared storage" if rate_limit_storage == "redis" else "process-local memory storage" ]]；业务 route 按成本选择 `rate_limit_low`、`rate_limit_medium` 或 `rate_limit_high`。
+[% endif %][% if background_tasks == "taskiq" %]- Taskiq 只使用 `TASKIQ_BROKER_URL` 与 `TASKIQ_RESULT_BACKEND_URL`，不复用 API Redis client 生命周期。
+- 使用 `uv run [[ project_slug ]] taskiq worker` 和 `uv run [[ project_slug ]] taskiq scheduler` 启动进程；业务 task 在调用方模块中通过 `broker.task` 定义。
 [% endif %]
 ## 约束
 

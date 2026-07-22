@@ -9,10 +9,10 @@ from fastapi.responses import JSONResponse
 [% if database == "postgresql" %][% if orm_type == "sqlalchemy" %]from sqlalchemy import select
 [% else %]from sqlmodel import select
 [% endif %][% endif %]
-[% if database == "postgresql" %]from app.api.deps import DBSession
+[% if database == "postgresql" %]from app.api.deps import DBSession[% if enable_redis %], Redis[% endif %]
+[% elif enable_redis %]from app.api.deps import Redis
 [% endif %]from app.core.config import settings
-[% if enable_redis %]from app.core.redis import redis_resources
-[% endif %]from app.schemas.base import HealthDetailResponse, HealthResponse
+from app.schemas.base import HealthDetailResponse, HealthResponse
 from app.services.health import build_health_response
 
 router = APIRouter(tags=["health"])
@@ -38,7 +38,12 @@ async def liveness_probe() -> dict[str, Any]:
 
 
 @router.get("/health/ready", response_model=None)
-async def readiness_probe([% if database == "postgresql" %]db: DBSession[% endif %]) -> dict[str, Any] | JSONResponse:
+[% if database == "postgresql" or enable_redis %]async def readiness_probe(
+[% if database == "postgresql" %]    db: DBSession,
+[% endif %][% if enable_redis %]    redis: Redis,
+[% endif %]) -> dict[str, Any] | JSONResponse:
+[% else %]async def readiness_probe() -> dict[str, Any] | JSONResponse:
+[% endif %]
     checks: dict[str, dict[str, Any]] = {}
 [% if database == "postgresql" %]
     try:
@@ -61,7 +66,7 @@ async def readiness_probe([% if database == "postgresql" %]db: DBSession[% endif
 [% endif %][% if enable_redis %]
     try:
         started_at = datetime.now(UTC)
-        is_healthy = await redis_resources.client.ping()
+        is_healthy = await redis.ping()
         latency_ms = (datetime.now(UTC) - started_at).total_seconds() * 1000
         checks["redis"] = (
             {"status": "healthy", "latency_ms": round(latency_ms, 2)}

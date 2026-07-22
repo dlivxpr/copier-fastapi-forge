@@ -26,3 +26,27 @@ uv run [[ project_slug ]] db current
 
 Item 示例 API：`POST /api/v1/items`、`GET /api/v1/items/{item_id}`、`PATCH /api/v1/items/{item_id}`、`DELETE /api/v1/items/{item_id}`。
 [% endif %][% endif %]
+[% if enable_redis %]
+
+## Redis
+
+配置 `REDIS_HOST`、`REDIS_PORT`、`REDIS_PASSWORD` 和 `REDIS_DB`。API lifespan 管理连接，`/health/ready` 验证 Redis。
+[% endif %][% if enable_caching %]
+
+FastAPICache 使用相同的 API Redis connection，并以 `[[ project_slug ]]:cache:` 为 key prefix。
+[% endif %][% if enable_rate_limiting %]
+
+## Rate limiting
+
+SlowAPI 默认限制为 `RATE_LIMIT_REQUESTS` / `RATE_LIMIT_PERIOD`，storage 为 `[[ rate_limit_storage ]]`。业务 route 使用 `rate_limit_low`、`rate_limit_medium` 或 `rate_limit_high` decorator。
+[% endif %][% if background_tasks == "taskiq" %]
+
+## Taskiq
+
+Taskiq 使用独立的 `TASKIQ_BROKER_URL` 与 `TASKIQ_RESULT_BACKEND_URL`：
+
+```bash
+uv run [[ project_slug ]] taskiq worker
+uv run [[ project_slug ]] taskiq scheduler
+```
+[% endif %]

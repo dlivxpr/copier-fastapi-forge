@@ -41,7 +41,9 @@ dependencies = [
     "pydantic-ai-slim[openai]>=2.0.0",
 [% endif %]
 [% if enable_logfire %]
-[% if ai_framework == "pydantic_ai" %]    "logfire[fastapi,pydantic-ai]>=4.0.0",
+[% if ai_framework == "pydantic_ai" and (enable_redis or background_tasks == "taskiq") %]    "logfire[fastapi,pydantic-ai,redis]>=4.0.0",
+[% elif ai_framework == "pydantic_ai" %]    "logfire[fastapi,pydantic-ai]>=4.0.0",
+[% elif enable_redis or background_tasks == "taskiq" %]    "logfire[fastapi,redis]>=4.0.0",
 [% else %]    "logfire[fastapi]>=4.0.0",
 [% endif %]
 [% endif %]

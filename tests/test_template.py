@@ -78,26 +78,31 @@ def test_default_profile_restores_legacy_enabled_and_disabled_capabilities(
         (
             {"background_tasks": "none"},
             {"background_tasks": "taskiq"},
-            ("taskiq-redis>=", "TaskiqScheduler"),
-            ("app/tasks/taskiq.py", "tests/test_tasks.py"),
+            (
+                "taskiq-redis>=",
+                "ListQueueBroker",
+                "TASKIQ_BROKER_URL=",
+                "TASKIQ_RESULT_BACKEND_URL=",
+            ),
+            ("app/worker/taskiq_app.py",),
         ),
         (
             {"enable_redis": False},
             {"enable_redis": True},
-            ("redis>=6.2.0", "REDIS_HOST=", "redis_resources"),
-            ("app/core/redis.py", "tests/test_redis.py"),
+            ("redis>=6.2.0", "REDIS_HOST=", "RedisClient"),
+            ("app/clients/redis.py", "tests/test_redis.py"),
         ),
         (
             {"enable_redis": False, "enable_caching": False},
             {"enable_redis": True, "enable_caching": True},
-            ("fastapi-cache2>=",),
-            (),
+            ("fastapi-cache2>=", "FastAPICache", "RedisBackend"),
+            ("app/core/cache.py",),
         ),
         (
             {"enable_rate_limiting": False},
             {"enable_rate_limiting": True},
-            ("slowapi>=", "RATE_LIMIT_REQUESTS=", "RateLimitError"),
-            (),
+            ("slowapi>=", "RATE_LIMIT_REQUESTS=", "SlowAPIASGIMiddleware"),
+            ("app/core/rate_limit.py",),
         ),
         (
             {"ai_framework": "none"},
@@ -149,6 +154,66 @@ def test_connected_capability_switches_have_disabled_and_enabled_output(
     for relative_path in paths:
         assert not (without / relative_path).exists()
         assert (with_capability / relative_path).is_file()
+
+
+def test_taskiq_is_independent_from_api_redis_and_has_no_demo_tasks(tmp_path: Path) -> None:
+    project = render_project(
+        tmp_path / "taskiq-only",
+        {
+            **minimal_answers(),
+            "background_tasks": "taskiq",
+        },
+    )
+    text = generated_text(project)
+    env = (project / ".env.example").read_text(encoding="utf-8")
+    main = (project / "app" / "main.py").read_text(encoding="utf-8")
+    cli = (project / "cli" / "commands.py").read_text(encoding="utf-8")
+
+    assert "TASKIQ_BROKER_URL=redis://localhost:6379/1" in env
+    assert "TASKIQ_RESULT_BACKEND_URL=redis://localhost:6379/1" in env
+    assert "REDIS_HOST" not in env
+    assert "RedisClient" not in main
+    assert not (project / "app" / "clients" / "redis.py").exists()
+    assert '"app.worker.taskiq_app:broker"' in cli
+    assert '"app.worker.taskiq_app:scheduler"' in cli
+    assert "example_task" not in text
+    assert "scheduled_health" not in text
+    assert "/limited" not in text
+    assert not (project / "tests" / "test_tasks.py").exists()
+
+
+def test_memory_rate_limit_has_no_redis_client_residue(tmp_path: Path) -> None:
+    project = render_project(
+        tmp_path / "memory-rate-limit",
+        {
+            **minimal_answers(),
+            "enable_rate_limiting": True,
+            "rate_limit_storage": "memory",
+        },
+    )
+    text = generated_text(project)
+    env = (project / ".env.example").read_text(encoding="utf-8")
+
+    assert 'storage_uri="memory://"' in text
+    assert "REDIS_HOST" not in env
+    assert "RedisClient" not in text
+    assert not (project / "app" / "clients" / "redis.py").exists()
+
+
+def test_redis_rate_limit_uses_shared_api_redis_storage(tmp_path: Path) -> None:
+    project = render_project(
+        tmp_path / "redis-rate-limit",
+        {
+            **minimal_answers(),
+            "enable_redis": True,
+            "enable_rate_limiting": True,
+            "rate_limit_storage": "redis",
+        },
+    )
+    text = generated_text(project)
+
+    assert "storage_uri=settings.REDIS_URL" in text
+    assert (project / "app" / "clients" / "redis.py").is_file()
 
 
 def test_deployment_asset_switches_remove_whole_trees(tmp_path: Path) -> None:

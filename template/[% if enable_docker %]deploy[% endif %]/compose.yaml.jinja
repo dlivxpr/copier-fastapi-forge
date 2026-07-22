@@ -6,7 +6,10 @@ services:
     environment:
       API_KEY: "${API_KEY:-[[ deployment_api_key ]]}"
 [% if database == "postgresql" %]      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/app
-[% endif %][% if enable_redis %]      REDIS_URL: redis://redis:6379/0
+[% endif %][% if enable_redis %]      REDIS_HOST: redis
+      REDIS_PORT: 6379
+[% endif %][% if background_tasks == "taskiq" %]      TASKIQ_BROKER_URL: redis://redis:6379/1
+      TASKIQ_RESULT_BACKEND_URL: redis://redis:6379/1
 [% endif %][% if ai_framework == "pydantic_ai" %]      LLM_BASE_URL: "${LLM_BASE_URL:-https://api.example.com/v1}"
       LLM_API_KEY: "${LLM_API_KEY:-model-key-CHANGEME}"
       LLM_MODEL: "${LLM_MODEL:-model-name-CHANGEME}"
@@ -28,9 +31,10 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    command: ["uv", "run", "--no-sync", "taskiq", "worker", "app.tasks.taskiq:broker"]
+    command: ["uv", "run", "--no-sync", "taskiq", "worker", "app.worker.taskiq_app:broker"]
     environment:
-      REDIS_URL: redis://redis:6379/0
+      TASKIQ_BROKER_URL: redis://redis:6379/1
+      TASKIQ_RESULT_BACKEND_URL: redis://redis:6379/1
 [% if enable_logfire %]      LOGFIRE_TOKEN: "${LOGFIRE_TOKEN:-}"
 [% endif %]
     depends_on:
@@ -41,9 +45,10 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    command: ["uv", "run", "--no-sync", "taskiq", "scheduler", "app.tasks.taskiq:scheduler"]
+    command: ["uv", "run", "--no-sync", "taskiq", "scheduler", "app.worker.taskiq_app:scheduler"]
     environment:
-      REDIS_URL: redis://redis:6379/0
+      TASKIQ_BROKER_URL: redis://redis:6379/1
+      TASKIQ_RESULT_BACKEND_URL: redis://redis:6379/1
 [% if enable_logfire %]      LOGFIRE_TOKEN: "${LOGFIRE_TOKEN:-}"
 [% endif %]
     depends_on:

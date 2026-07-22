@@ -1,0 +1,25 @@
+from __future__ import annotations
+
+import pytest
+from redis.asyncio import Redis
+
+from app.worker.taskiq_app import broker, result_backend, scheduler
+
+pytestmark = pytest.mark.anyio
+
+
+async def test_taskiq_broker_scheduler_and_result_backend_use_real_redis() -> None:
+    await broker.startup()
+    try:
+        async with Redis(connection_pool=broker.connection_pool) as broker_redis:
+            assert await broker_redis.ping() is True
+        async with Redis(connection_pool=result_backend.redis_pool) as result_redis:
+            assert await result_redis.ping() is True
+        for source in scheduler.sources:
+            await source.startup()
+            try:
+                assert await source.get_schedules() == []
+            finally:
+                await source.shutdown()
+    finally:
+        await broker.shutdown()

@@ -3,17 +3,37 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
-from app.core.redis import RedisResources, redis_resources
+from app.clients.redis import RedisClient
+from app.main import app
 
 pytestmark = pytest.mark.anyio
 
 
-async def test_redis_resources_require_initialization_and_close_idempotently(
-    client: AsyncClient,
-) -> None:
-    resources = RedisResources()
-    with pytest.raises(RuntimeError, match="not initialized"):
-        _ = resources.client
+async def test_redis_client_requires_connection() -> None:
+    redis = RedisClient()
 
-    await resources.close()
-    assert redis_resources.client is not None
+    assert await redis.ping() is False
+    with pytest.raises(RuntimeError, match="Redis client not connected"):
+        _ = redis.raw
+    with pytest.raises(RuntimeError, match="Redis client not connected"):
+        await redis.get("missing")
+    with pytest.raises(RuntimeError, match="Redis client not connected"):
+        await redis.set("missing", "value")
+    with pytest.raises(RuntimeError, match="Redis client not connected"):
+        await redis.delete("missing")
+
+
+async def test_redis_client_round_trip_uses_string_contract(client: AsyncClient) -> None:
+    redis: RedisClient = app.state.redis
+    key = "[[ project_slug ]]:test:redis-client"
+
+    try:
+        assert await redis.ping() is True
+        await redis.set(key, "héllo", ttl=60)
+        assert await redis.raw.get(key) == "héllo".encode()
+        assert await redis.get(key) == "héllo"
+        assert await redis.exists(key) is True
+        assert await redis.delete(key) == 1
+        assert await redis.get(key) is None
+    finally:
+        await redis.delete(key)

@@ -7,7 +7,7 @@ on:
 jobs:
   quality:
     runs-on: ubuntu-latest
-[% if database == "postgresql" or enable_redis %]    services:
+[% if database == "postgresql" or enable_redis or background_tasks == "taskiq" %]    services:
 [% if database == "postgresql" %]      postgres:
         image: postgres:17-alpine
         env:
@@ -21,7 +21,7 @@ jobs:
           --health-interval 2s
           --health-timeout 3s
           --health-retries 15
-[% endif %][% if enable_redis %]      redis:
+[% endif %][% if enable_redis or background_tasks == "taskiq" %]      redis:
         image: redis:8-alpine
         ports:
           - 6379:6379
@@ -38,6 +38,8 @@ jobs:
       POSTGRES_DB: app
 [% endif %][% if enable_redis %]      REDIS_HOST: 127.0.0.1
       REDIS_PORT: 6379
+[% endif %][% if background_tasks == "taskiq" %]      TASKIQ_BROKER_URL: redis://127.0.0.1:6379/1
+      TASKIQ_RESULT_BACKEND_URL: redis://127.0.0.1:6379/1
 [% endif %][% if enable_logfire %]      LOGFIRE_SEND_TO_LOGFIRE: "false"
 [% endif %]    steps:
       - uses: actions/checkout@v4
