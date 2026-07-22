@@ -104,6 +104,7 @@ def test_pydantic_ai_renders_only_compatible_single_turn_capability(tmp_path: Pa
     deps: list[str] = cast("list[str]", raw_deps)
     dependency_names = {dep.partition(">=")[0].partition("[")[0] for dep in deps}
     assert "pydantic-ai-slim" in dependency_names
+    assert "fastapi[standard]>=0.135.0" in deps
 
     env_example = (project / ".env.example").read_text(encoding="utf-8")
     assert "LLM_BASE_URL=" in env_example

@@ -5,7 +5,9 @@ description = "[[ project_description ]]"
 readme = "README.md"
 requires-python = ">=[[ python_version ]]"
 dependencies = [
-    "fastapi[standard]>=0.115.0",
+[% if agent_capability == "pydantic-ai" %]    "fastapi[standard]>=0.135.0",
+[% else %]    "fastapi[standard]>=0.115.0",
+[% endif %]
     "pydantic-settings>=2.7.0",
 [% if background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]
     "redis>=6.2.0",

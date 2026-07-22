@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from pydantic_ai import (
     AgentRunResultEvent,
@@ -21,7 +21,7 @@ from app.core.exceptions import AgentInvocationError
 
 @dataclass(frozen=True, slots=True)
 class AgentStreamFrame:
-    event: str
+    event: Literal["content", "tool_call", "tool_result", "complete", "error"]
     data: dict[str, Any]
 
 
@@ -70,10 +70,11 @@ class AgentInvocationService:
                     elif isinstance(event, AgentRunResultEvent):
                         yield AgentStreamFrame("complete", {"output": event.result.output})
         except Exception:
+            error = AgentInvocationError()
             yield AgentStreamFrame(
                 "error",
                 {
-                    "code": "AGENT_INVOCATION_ERROR",
-                    "message": "Agent invocation failed",
+                    "code": error.code,
+                    "message": error.message,
                 },
             )

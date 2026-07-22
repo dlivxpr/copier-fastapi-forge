@@ -67,7 +67,7 @@ This service follows a thin-route pattern:
 - **Core** (`app/core/`): Domain exceptions, configuration, pagination.
 - **Dependencies** (`app/api/deps.py`): FastAPI dependency injection for API key, configuration.
 [% if agent_capability == "pydantic-ai" %]- **Agent** (`app/agents/assistant.py`): Pydantic AI agent and caller-owned runtime dependencies.
-- **Agent service** (`app/services/agent.py`): Shared single-turn JSON/SSE invocation semantics.
+- **Agent invocation** (`app/services/agent.py`): Shared single-turn JSON/SSE invocation semantics.
 - **Model interface**: Configure only `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL`.
 [% endif %]
 
