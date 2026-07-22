@@ -15,8 +15,8 @@ def configure_telemetry() -> None:
         send_to_logfire="if-token-present",
         console=False,
     )
-[% if background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]    logfire.instrument_redis(capture_statement=False)
-[% endif %][% if agent_capability == "pydantic-ai" %]    logfire.instrument_pydantic_ai(include_content=False, include_binary_content=False)
+[% if enable_redis %]    logfire.instrument_redis(capture_statement=False)
+[% endif %][% if ai_framework == "pydantic_ai" %]    logfire.instrument_pydantic_ai(include_content=False, include_binary_content=False)
 [% endif %]
 [% if database == "postgresql" %]
 def instrument_database(engine: AsyncEngine) -> None:

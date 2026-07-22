@@ -114,8 +114,7 @@ class Settings(BaseSettings):
         environment = info.data.get("ENVIRONMENT", "local") if info.data else "local"
         if "*" in value and environment == "production":
             raise ValueError(
-                "CORS_ORIGINS cannot contain '*' in production! "
-                "Specify explicit allowed origins."
+                "CORS_ORIGINS cannot contain '*' in production! Specify explicit allowed origins."
             )
         return value
 [% endif %]

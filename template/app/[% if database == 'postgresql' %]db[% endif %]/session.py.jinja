@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
-[% if orm == "sqlalchemy" %]from sqlalchemy.ext.asyncio import (
+[% if orm_type == "sqlalchemy" %]from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
@@ -14,8 +14,8 @@ from sqlalchemy.exc import SQLAlchemyError
 [% else %]from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 [% endif %]
-from app.core.exceptions import PersistenceError
-[% if telemetry == "logfire" %]from app.core.telemetry import instrument_database
+from app.core.exceptions import DatabaseError
+[% if enable_logfire %]from app.core.telemetry import instrument_database
 [% endif %]
 
 class DatabaseSessionManager:
@@ -29,7 +29,7 @@ class DatabaseSessionManager:
         if self._engine is not None:
             raise RuntimeError("Database session manager is already initialized")
         engine = create_async_engine(database_url, pool_pre_ping=True)
-[% if telemetry == "logfire" %]        instrument_database(engine)
+[% if enable_logfire %]        instrument_database(engine)
 [% endif %]
         session_factory = async_sessionmaker(
             bind=engine,
@@ -49,7 +49,7 @@ class DatabaseSessionManager:
                 await session.commit()
             except SQLAlchemyError as exc:
                 await session.rollback()
-                raise PersistenceError(resource="transaction") from exc
+                raise DatabaseError() from exc
             except BaseException:
                 await session.rollback()
                 raise

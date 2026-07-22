@@ -45,7 +45,7 @@ legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/core/
 target = "app/core/logging.py"
 allowed_transformations = ["删除用户/JWT 脱敏模式", "保留凭据脱敏"]
 removed_references = ["email、JWT、Bearer、refresh token 模式"]
-approved_deviation = ["类名明确为 SecretRedactionFilter"]
+approved_deviation = ["无"]
 verification = ["test_minimal_tree_contains_only_legacy_core_service"]
 
 [[target]]

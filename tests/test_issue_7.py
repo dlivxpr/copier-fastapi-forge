@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import subprocess
@@ -277,6 +278,63 @@ def test_minimal_project_passes_http_and_cli_runtime_contract(tmp_path: Path) ->
     assert "/hello" not in routes.stdout
 
 
+def test_enabled_dependency_readiness_reports_failure(tmp_path: Path) -> None:
+    cases = [
+        ("redis", {"enable_redis": True}, "REDIS_PORT"),
+        ("database", {"database": "postgresql"}, "POSTGRES_PORT"),
+    ]
+    for check_name, answers, port_variable in cases:
+        project = render_project(
+            tmp_path / f"{check_name}-readiness",
+            {**minimal_answers(), **answers},
+        )
+        sync = subprocess.run(
+            ["uv", "sync", "--all-groups"],
+            cwd=project,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert sync.returncode == 0, sync.stderr
+
+        script = textwrap.dedent(
+            f"""
+            import os
+
+            import anyio
+            from httpx import ASGITransport, AsyncClient
+
+            os.environ["{port_variable}"] = "1"
+
+            from app.main import app
+
+
+            async def verify() -> None:
+                async with app.router.lifespan_context(app):
+                    transport = ASGITransport(app=app, raise_app_exceptions=False)
+                    async with AsyncClient(
+                        transport=transport,
+                        base_url="http://test",
+                    ) as client:
+                        response = await client.get("/health/ready")
+                        assert response.status_code == 503
+                        assert response.json()["status"] == "not_ready"
+                        assert response.json()["checks"]["{check_name}"]["status"] == "unhealthy"
+
+
+            anyio.run(verify)
+            """
+        )
+        runtime = subprocess.run(
+            ["uv", "run", "python", "-c", script],
+            cwd=project,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert runtime.returncode == 0, runtime.stderr
+
+
 def test_minimal_generated_project_passes_quality_commands(tmp_path: Path) -> None:
     project = render_project(tmp_path / "quality", minimal_answers())
     commands = [
@@ -299,9 +357,25 @@ def test_minimal_generated_project_passes_quality_commands(tmp_path: Path) -> No
         )
 
 
+def _normalize_content(content: str) -> str:
+    return "\n".join(line.rstrip() for line in content.replace("\r\n", "\n").splitlines())
+
+
 def _normalized_digest(content: str) -> str:
-    normalized = "\n".join(line.rstrip() for line in content.replace("\r\n", "\n").splitlines())
-    return hashlib.sha256(f"{normalized}\n".encode()).hexdigest()
+    return hashlib.sha256(f"{_normalize_content(content)}\n".encode()).hexdigest()
+
+
+def _normalized_diff_digest(legacy_content: str, target_content: str) -> str:
+    normalized_diff = "\n".join(
+        difflib.unified_diff(
+            _normalize_content(legacy_content).splitlines(),
+            _normalize_content(target_content).splitlines(),
+            fromfile="legacy",
+            tofile="target",
+            lineterm="",
+        )
+    )
+    return hashlib.sha256(f"{normalized_diff}\n".encode()).hexdigest()
 
 
 def _legacy_context(profile: dict[str, object]) -> dict[str, object]:
@@ -375,6 +449,10 @@ def test_migration_equivalence_manifest_rejects_unregistered_content(
         observed[target_path] = {
             "legacy_sha256": _normalized_digest(legacy_content),
             "target_sha256": _normalized_digest(target_content),
+            "normalized_diff_sha256": _normalized_diff_digest(
+                legacy_content,
+                target_content,
+            ),
         }
 
     assert observed == protected

@@ -52,7 +52,8 @@ def test_default_profile_restores_legacy_enabled_and_disabled_capabilities(
     assert (project / "app" / "db" / "session.py").is_file()
     assert "sqlalchemy[asyncio]" in text
     assert "pydantic-ai-slim[openai]" in text
-    assert "logfire[pydantic-ai]" in text
+    assert "logfire[fastapi,pydantic-ai]" in text
+    assert (project / "app" / "agents" / "assistant.py").is_file()
     assert "CORS_ORIGINS" in text
     assert (project / "deploy" / "Dockerfile").is_file()
     assert (project / "deploy" / "nginx.conf").is_file()
@@ -66,59 +67,88 @@ def test_default_profile_restores_legacy_enabled_and_disabled_capabilities(
 
 
 @pytest.mark.parametrize(
-    ("disabled", "enabled", "marker"),
+    ("disabled", "enabled", "markers", "paths"),
     [
         (
             {"database": "none"},
             {"database": "postgresql", "orm_type": "sqlalchemy"},
-            "asyncpg>=",
+            ("asyncpg>=", "POSTGRES_HOST=", "DATABASE_URL", "DatabaseError"),
+            ("app/db/session.py", "app/db/base.py", "alembic.ini", "alembic/env.py"),
         ),
         (
             {"background_tasks": "none"},
             {"background_tasks": "taskiq"},
-            "taskiq-redis>=",
+            ("taskiq-redis>=", "TaskiqScheduler"),
+            ("app/tasks/taskiq.py", "tests/test_tasks.py"),
         ),
-        ({"enable_redis": False}, {"enable_redis": True}, "REDIS_HOST="),
+        (
+            {"enable_redis": False},
+            {"enable_redis": True},
+            ("redis>=6.2.0", "REDIS_HOST=", "redis_resources"),
+            ("app/core/redis.py", "tests/test_redis.py"),
+        ),
         (
             {"enable_redis": False, "enable_caching": False},
             {"enable_redis": True, "enable_caching": True},
-            "fastapi-cache2>=",
+            ("fastapi-cache2>=",),
+            (),
         ),
         (
             {"enable_rate_limiting": False},
             {"enable_rate_limiting": True},
-            "slowapi>=",
+            ("slowapi>=", "RATE_LIMIT_REQUESTS=", "RateLimitError"),
+            (),
         ),
         (
             {"ai_framework": "none"},
             {"ai_framework": "pydantic_ai"},
-            "pydantic-ai-slim[openai]>=",
+            ("pydantic-ai-slim[openai]>=", "LLM_BASE_URL"),
+            (
+                "app/agents/assistant.py",
+                "app/services/agent.py",
+                "app/api/agent.py",
+                "tests/test_agent.py",
+            ),
         ),
         (
             {"ai_framework": "none", "enable_logfire": False},
-            {"ai_framework": "pydantic_ai", "enable_logfire": True},
-            "logfire[pydantic-ai]>=",
+            {"ai_framework": "none", "enable_logfire": True},
+            ("logfire[fastapi]>=", "LOGFIRE_TOKEN", "configure_telemetry"),
+            ("app/core/telemetry.py",),
         ),
-        ({"enable_cors": False}, {"enable_cors": True}, "CORS_ORIGINS="),
+        (
+            {"enable_cors": False},
+            {"enable_cors": True},
+            ("CORS_ORIGINS=", "CORSMiddleware"),
+            (),
+        ),
     ],
 )
 def test_connected_capability_switches_have_disabled_and_enabled_output(
     tmp_path: Path,
     disabled: dict[str, object],
     enabled: dict[str, object],
-    marker: str,
+    markers: tuple[str, ...],
+    paths: tuple[str, ...],
 ) -> None:
+    case_name = next(iter(enabled))
     without = render_project(
-        tmp_path / f"without-{marker.split('>')[0]}",
+        tmp_path / f"without-{case_name}",
         {**minimal_answers(), **disabled},
     )
     with_capability = render_project(
-        tmp_path / f"with-{marker.split('>')[0]}",
+        tmp_path / f"with-{case_name}",
         {**minimal_answers(), **enabled},
     )
+    without_text = generated_text(without)
+    with_text = generated_text(with_capability)
 
-    assert marker not in generated_text(without)
-    assert marker in generated_text(with_capability)
+    for marker in markers:
+        assert marker not in without_text
+        assert marker in with_text
+    for relative_path in paths:
+        assert not (without / relative_path).exists()
+        assert (with_capability / relative_path).is_file()
 
 
 def test_deployment_asset_switches_remove_whole_trees(tmp_path: Path) -> None:

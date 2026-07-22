@@ -38,8 +38,10 @@ dependencies = [
 [% if ai_framework == "pydantic_ai" %]
     "pydantic-ai-slim[openai]>=2.0.0",
 [% endif %]
-[% if enable_logfire and ai_framework == "pydantic_ai" %]
-    "logfire[pydantic-ai]>=4.0.0",
+[% if enable_logfire %]
+[% if ai_framework == "pydantic_ai" %]    "logfire[fastapi,pydantic-ai]>=4.0.0",
+[% else %]    "logfire[fastapi]>=4.0.0",
+[% endif %]
 [% endif %]
 ]
 

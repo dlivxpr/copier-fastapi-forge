@@ -1,11 +1,16 @@
 """Public health probes."""
 
+[% if database == "postgresql" or enable_redis %]from datetime import UTC, datetime
+[% endif -%]
 from typing import Any
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 from app.core.config import settings
-from app.schemas.base import HealthDetailResponse, HealthResponse
+[% if enable_redis %]from app.core.redis import redis_resources
+[% endif %][% if database == "postgresql" %]from app.db.session import database
+[% endif %]from app.schemas.base import HealthDetailResponse, HealthResponse
 from app.services.health import build_health_response
 
 router = APIRouter(tags=["health"])
@@ -31,5 +36,42 @@ async def liveness_probe() -> dict[str, Any]:
 
 
 @router.get("/health/ready", response_model=None)
-async def readiness_probe() -> dict[str, Any]:
-    return build_health_response(status="ready", checks={})
+async def readiness_probe() -> dict[str, Any] | JSONResponse:
+    checks: dict[str, dict[str, Any]] = {}
+[% if database == "postgresql" %]
+    try:
+        started_at = datetime.now(UTC)
+        await database.check_connection()
+        latency_ms = (datetime.now(UTC) - started_at).total_seconds() * 1000
+        checks["database"] = {
+            "status": "healthy",
+            "latency_ms": round(latency_ms, 2),
+            "type": "postgresql",
+        }
+    except Exception as exc:
+        checks["database"] = {
+            "status": "unhealthy",
+            "error": str(exc),
+            "type": "postgresql",
+        }
+[% endif %][% if enable_redis %]
+    try:
+        started_at = datetime.now(UTC)
+        is_healthy = await redis_resources.client.ping()
+        latency_ms = (datetime.now(UTC) - started_at).total_seconds() * 1000
+        checks["redis"] = (
+            {"status": "healthy", "latency_ms": round(latency_ms, 2)}
+            if is_healthy
+            else {"status": "unhealthy", "error": "Ping failed"}
+        )
+    except Exception as exc:
+        checks["redis"] = {"status": "unhealthy", "error": str(exc)}
+[% endif %]    all_healthy = all(check["status"] == "healthy" for check in checks.values())
+    response_data = build_health_response(
+        status="ready" if all_healthy else "not_ready",
+        checks=checks,
+    )
+    response_data.update(checks)
+    if not all_healthy:
+        return JSONResponse(status_code=503, content=response_data)
+    return response_data

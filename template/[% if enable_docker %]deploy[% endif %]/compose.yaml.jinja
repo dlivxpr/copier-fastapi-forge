@@ -6,17 +6,17 @@ services:
     environment:
       API_KEY: "${API_KEY:-[[ deployment_api_key ]]}"
 [% if database == "postgresql" %]      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/app
-[% endif %][% if background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]      REDIS_URL: redis://redis:6379/0
-[% endif %][% if agent_capability == "pydantic-ai" %]      LLM_BASE_URL: "${LLM_BASE_URL:-https://api.example.com/v1}"
+[% endif %][% if enable_redis %]      REDIS_URL: redis://redis:6379/0
+[% endif %][% if ai_framework == "pydantic_ai" %]      LLM_BASE_URL: "${LLM_BASE_URL:-https://api.example.com/v1}"
       LLM_API_KEY: "${LLM_API_KEY:-model-key-CHANGEME}"
       LLM_MODEL: "${LLM_MODEL:-model-name-CHANGEME}"
-[% endif %][% if telemetry == "logfire" %]      LOGFIRE_TOKEN: "${LOGFIRE_TOKEN:-}"
+[% endif %][% if enable_logfire %]      LOGFIRE_TOKEN: "${LOGFIRE_TOKEN:-}"
 [% endif %]    ports:
       - "8000:8000"
-[% if database == "postgresql" or background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]    depends_on:
+[% if database == "postgresql" or enable_redis or background_tasks == "taskiq" %]    depends_on:
 [% if database == "postgresql" %]      migrate:
         condition: service_completed_successfully
-[% endif %][% if background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]      redis:
+[% endif %][% if enable_redis or background_tasks == "taskiq" %]      redis:
         condition: service_healthy
 [% endif %][% endif %]    healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready')"]
@@ -31,7 +31,7 @@ services:
     command: ["uv", "run", "--no-sync", "taskiq", "worker", "app.tasks.taskiq:broker"]
     environment:
       REDIS_URL: redis://redis:6379/0
-[% if telemetry == "logfire" %]      LOGFIRE_TOKEN: "${LOGFIRE_TOKEN:-}"
+[% if enable_logfire %]      LOGFIRE_TOKEN: "${LOGFIRE_TOKEN:-}"
 [% endif %]
     depends_on:
       redis:
@@ -44,7 +44,7 @@ services:
     command: ["uv", "run", "--no-sync", "taskiq", "scheduler", "app.tasks.taskiq:scheduler"]
     environment:
       REDIS_URL: redis://redis:6379/0
-[% if telemetry == "logfire" %]      LOGFIRE_TOKEN: "${LOGFIRE_TOKEN:-}"
+[% if enable_logfire %]      LOGFIRE_TOKEN: "${LOGFIRE_TOKEN:-}"
 [% endif %]
     depends_on:
       redis:
@@ -76,7 +76,7 @@ services:
       retries: 15
     volumes:
       - postgres-data:/var/lib/postgresql/data
-[% endif %][% if background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]
+[% endif %][% if enable_redis or background_tasks == "taskiq" %]
   redis:
     image: redis:8-alpine
     ports:
@@ -88,8 +88,8 @@ services:
       retries: 15
     volumes:
       - redis-data:/data
-[% endif %][% if database == "postgresql" or background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]
+[% endif %][% if database == "postgresql" or enable_redis or background_tasks == "taskiq" %]
 volumes:
 [% if database == "postgresql" %]  postgres-data:
-[% endif %][% if background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]  redis-data:
+[% endif %][% if enable_redis or background_tasks == "taskiq" %]  redis-data:
 [% endif %][% endif %]

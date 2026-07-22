@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-[% if orm == "sqlalchemy" %]from sqlalchemy.orm import DeclarativeBase
+[% if orm_type == "sqlalchemy" %]from sqlalchemy.orm import DeclarativeBase
 
 
 class Base(DeclarativeBase):

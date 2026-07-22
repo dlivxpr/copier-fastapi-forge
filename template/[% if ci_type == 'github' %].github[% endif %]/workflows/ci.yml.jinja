@@ -7,7 +7,7 @@ on:
 jobs:
   quality:
     runs-on: ubuntu-latest
-[% if database == "postgresql" or background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]    services:
+[% if database == "postgresql" or enable_redis %]    services:
 [% if database == "postgresql" %]      postgres:
         image: postgres:17-alpine
         env:
@@ -21,7 +21,7 @@ jobs:
           --health-interval 2s
           --health-timeout 3s
           --health-retries 15
-[% endif %][% if background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]      redis:
+[% endif %][% if enable_redis %]      redis:
         image: redis:8-alpine
         ports:
           - 6379:6379
@@ -32,8 +32,8 @@ jobs:
           --health-retries 15
 [% endif %][% endif %]    env:
 [% if database == "postgresql" %]      DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/app
-[% endif %][% if background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]      REDIS_URL: redis://127.0.0.1:6379/0
-[% endif %][% if telemetry == "logfire" %]      LOGFIRE_SEND_TO_LOGFIRE: "false"
+[% endif %][% if enable_redis %]      REDIS_URL: redis://127.0.0.1:6379/0
+[% endif %][% if enable_logfire %]      LOGFIRE_SEND_TO_LOGFIRE: "false"
 [% endif %]    steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6

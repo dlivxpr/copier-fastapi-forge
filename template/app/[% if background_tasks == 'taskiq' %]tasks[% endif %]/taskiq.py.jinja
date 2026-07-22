@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-[% if telemetry == "logfire" %]import logfire
+[% if enable_logfire %]import logfire
 [% endif -%]
 from taskiq import TaskiqScheduler
 from taskiq.schedule_sources import LabelScheduleSource
 from taskiq_redis import RedisAsyncResultBackend, RedisStreamBroker
 
 from app.core.config import Settings
-[% if telemetry == "logfire" %]from app.core.telemetry import configure_telemetry
+[% if enable_logfire %]from app.core.telemetry import configure_telemetry
 
 configure_telemetry()
 [% endif %]
@@ -27,7 +27,7 @@ scheduler = TaskiqScheduler(broker=broker, sources=[LabelScheduleSource(broker)]
 )
 async def example_task(value: str = "scheduled") -> dict[str, str]:
     """Return a value so callers can observe successful worker execution."""
-[% if telemetry == "logfire" %]    with logfire.span("Run Taskiq example task"):
+[% if enable_logfire %]    with logfire.span("Run Taskiq example task"):
         return {"value": value}
 [% else %]    return {"value": value}
 [% endif -%]
