@@ -1,0 +1,29 @@
+from __future__ import annotations
+
+from uuid import uuid4
+
+import pytest
+from httpx import AsyncClient
+
+pytestmark = pytest.mark.anyio
+
+
+async def test_cache_hit_and_invalidation_are_observable(
+    client: AsyncClient, api_key_headers: dict[str, str]
+) -> None:
+    key = str(uuid4())
+    first = await client.get(f"/api/v1/cache/{key}", headers=api_key_headers)
+    second = await client.get(f"/api/v1/cache/{key}", headers=api_key_headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json() == second.json()
+    assert first.headers["X-FastAPI-Cache"] == "MISS"
+    assert second.headers["X-FastAPI-Cache"] == "HIT"
+
+    invalidated = await client.delete("/api/v1/cache", headers=api_key_headers)
+    assert invalidated.status_code == 204
+    after_invalidation = await client.get(f"/api/v1/cache/{key}", headers=api_key_headers)
+    assert after_invalidation.status_code == 200
+    assert after_invalidation.json() != first.json()
+    assert after_invalidation.headers["X-FastAPI-Cache"] == "MISS"

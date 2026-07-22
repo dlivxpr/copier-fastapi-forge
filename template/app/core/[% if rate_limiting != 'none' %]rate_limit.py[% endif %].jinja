@@ -1,0 +1,60 @@
+from __future__ import annotations
+
+[% if rate_limiting == "redis" %]import math
+from typing import cast
+
+from redis.asyncio import Redis
+
+_REDIS_FIXED_WINDOW = """
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then
+    redis.call('PEXPIRE', KEYS[1], ARGV[1])
+end
+return {count, redis.call('PTTL', KEYS[1])}
+"""
+[% else %]import asyncio
+import math
+import time
+[% endif %]
+
+class RateLimiter:
+    """Fixed-window limiter backed by process memory or shared Redis."""
+
+    def __init__(
+        self,
+        *,
+        limit: int,
+        period_seconds: int,
+[% if rate_limiting == "redis" %]        redis_client: Redis,
+[% endif %]    ) -> None:
+        self._limit = limit
+        self._period_seconds = period_seconds
+[% if rate_limiting == "redis" %]        self._redis = redis_client
+[% else %]        self._windows: dict[str, tuple[int, float]] = {}
+        self._lock = asyncio.Lock()
+[% endif %]
+    async def consume(self, key: str) -> int | None:
+        """Consume one request and return retry seconds only when rejected."""
+[% if rate_limiting == "redis" %]        period_ms = self._period_seconds * 1000
+        raw = await self._redis.eval(
+            _REDIS_FIXED_WINDOW,
+            1,
+            f"rate-limit:{key}",
+            period_ms,
+        )
+        count, ttl_ms = cast("list[int]", raw)
+        if count <= self._limit:
+            return None
+        return max(1, math.ceil(ttl_ms / 1000))
+[%- else %]        now = time.monotonic()
+        async with self._lock:
+            count, resets_at = self._windows.get(key, (0, now + self._period_seconds))
+            if now >= resets_at:
+                count = 0
+                resets_at = now + self._period_seconds
+            count += 1
+            self._windows[key] = (count, resets_at)
+            if count <= self._limit:
+                return None
+            return max(1, math.ceil(resets_at - now))
+[%- endif -%][[ "" ]]

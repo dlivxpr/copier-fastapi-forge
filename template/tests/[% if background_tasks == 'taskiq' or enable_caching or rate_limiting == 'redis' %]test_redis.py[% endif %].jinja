@@ -1,0 +1,19 @@
+from __future__ import annotations
+
+import pytest
+from httpx import AsyncClient
+
+from app.core.redis import RedisResources, redis_resources
+
+pytestmark = pytest.mark.anyio
+
+
+async def test_redis_resources_require_initialization_and_close_idempotently(
+    client: AsyncClient,
+) -> None:
+    resources = RedisResources()
+    with pytest.raises(RuntimeError, match="not initialized"):
+        _ = resources.client
+
+    await resources.close()
+    assert redis_resources.client is not None

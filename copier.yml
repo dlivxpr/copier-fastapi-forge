@@ -51,6 +51,42 @@ orm:
   default: sqlalchemy
   when: "[[ database == 'postgresql' ]]"
 
+background_tasks:
+  type: str
+  help: Distributed background task capability
+  choices:
+    No background tasks: none
+    Taskiq: taskiq
+  default: none
+
+enable_caching:
+  type: bool
+  help: Enable Redis-backed HTTP response caching
+  default: false
+
+rate_limiting:
+  type: str
+  help: HTTP rate limiting
+  choices:
+    Disabled: none
+    Process memory: memory
+    Shared Redis: redis
+  default: none
+
+rate_limit_requests:
+  type: int
+  help: Requests allowed in each rate limit window
+  default: 100
+  when: "[[ rate_limiting != 'none' ]]"
+  validator: "[% if rate_limit_requests < 1 %]Must be at least 1[% endif %]"
+
+rate_limit_period_seconds:
+  type: int
+  help: Rate limit window length in seconds
+  default: 60
+  when: "[[ rate_limiting != 'none' ]]"
+  validator: "[% if rate_limit_period_seconds < 1 %]Must be at least 1[% endif %]"
+
 deployment_api_key:
   type: str
   secret: true

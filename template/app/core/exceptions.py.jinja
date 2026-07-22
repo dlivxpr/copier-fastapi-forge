@@ -42,4 +42,14 @@ class PersistenceError(DomainError):
 
 [% endif %]class UnauthorizedError(DomainError):
     def __init__(self, message: str = "Unauthorized") -> None:
-        super().__init__(code="UNAUTHORIZED", message=message)
+        super().__init__(code="UNAUTHORIZED", message=message)[% if rate_limiting != "none" %]
+
+
+class RateLimitError(DomainError):
+    def __init__(self, retry_after_seconds: int) -> None:
+        super().__init__(
+            code="RATE_LIMIT_EXCEEDED",
+            message="Rate limit exceeded",
+            details={"retry_after_seconds": retry_after_seconds},
+        )
+[%- endif %]

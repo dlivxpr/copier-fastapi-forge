@@ -40,6 +40,24 @@ uv run uvicorn app.main:app --reload
 # Run tests
 uv run pytest
 ```
+[% if background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]
+Redis 消费能力需要先启动共享实例：
+
+```bash
+docker compose up -d redis
+```
+[% endif %]
+[% if background_tasks == "taskiq" %]
+后台任务使用以下独立进程：
+
+```bash
+# 启动 worker
+uv run taskiq worker app.tasks.taskiq:broker
+
+# 启动 scheduler
+uv run taskiq scheduler app.tasks.taskiq:scheduler
+```
+[% endif %]
 
 ## Architecture
 

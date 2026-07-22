@@ -1,0 +1,27 @@
+from __future__ import annotations
+
+from redis.asyncio import Redis
+
+
+class RedisResources:
+    """Own the API process's shared Redis connection."""
+
+    def __init__(self) -> None:
+        self._client: Redis | None = None
+
+    @property
+    def client(self) -> Redis:
+        if self._client is None:
+            raise RuntimeError("Redis resources are not initialized")
+        return self._client
+
+    def initialize(self, url: str) -> None:
+        self._client = Redis.from_url(url, decode_responses=False)
+
+    async def close(self) -> None:
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
+
+
+redis_resources = RedisResources()

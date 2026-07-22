@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.deps import RequireApiKey
-[% if database == "postgresql" %]from app.api.resources import router as resources_router
+[% if enable_caching %]from app.api.cache import router as cache_router
+[% endif %]from app.api.deps import RequireApiKey
+[% if rate_limiting != "none" %]from app.api.rate_limit import router as rate_limit_router
+[% endif %][% if database == "postgresql" %]from app.api.resources import router as resources_router
 [% endif %]from app.core.exceptions import NotFoundError
 
 router = APIRouter(dependencies=[RequireApiKey])
-[% if database == "postgresql" %]router.include_router(resources_router)
+[% if enable_caching %]router.include_router(cache_router)
+[% endif %][% if rate_limiting != "none" %]router.include_router(rate_limit_router)
+[% endif %][% if database == "postgresql" %]router.include_router(resources_router)
 [% endif %]
 
 @router.get("/hello")

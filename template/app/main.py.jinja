@@ -5,11 +5,15 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
+[% if enable_caching %]from fastapi_cache import FastAPICache
+from fastapi_cache.backends.redis import RedisBackend
+[% endif %]
 from app.api.exception_handlers import register_exception_handlers
 from app.api.router import router
 from app.core.config import Settings
-[% if database == "postgresql" %]from app.db.session import database
+[% if rate_limiting != "none" %]from app.core.rate_limit import RateLimiter
+[% endif %][% if background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]from app.core.redis import redis_resources
+[% endif %][% if database == "postgresql" %]from app.db.session import database
 [% endif %]
 settings = Settings()
 
@@ -18,11 +22,19 @@ settings = Settings()
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Initialize and tear down shared resources."""
 [% if database == "postgresql" %]    database.initialize(settings.database_url)
+[% endif %][% if background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]    redis_resources.initialize(settings.redis_url)
+[% endif %][% if enable_caching %]    FastAPICache.init(RedisBackend(redis_resources.client), prefix="service-cache")
+[% endif %][% if rate_limiting != "none" %]    app.state.rate_limiter = RateLimiter(
+        limit=settings.rate_limit_requests,
+        period_seconds=settings.rate_limit_period_seconds,
+[% if rate_limiting == "redis" %]        redis_client=redis_resources.client,
+[% endif %]    )
 [% endif %]    try:
         yield
     finally:
-[% if database == "postgresql" %]        await database.close()
-[% else %]        pass
+[% if background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]        await redis_resources.close()
+[% endif %][% if database == "postgresql" %]        await database.close()
+[% endif %][% if database != "postgresql" and background_tasks != "taskiq" and not enable_caching and rate_limiting != "redis" %]        pass
 [% endif %]
 
 app = FastAPI(

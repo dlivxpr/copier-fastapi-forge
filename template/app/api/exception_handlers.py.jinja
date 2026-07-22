@@ -26,7 +26,8 @@ async def domain_error_handler(request: Request, exc: Exception) -> JSONResponse
 [% if database == "postgresql" %]        "CONFLICT": 409,
         "PERSISTENCE_ERROR": 500,
 [% endif %]        "UNAUTHORIZED": 401,
-    }
+[% if rate_limiting != "none" %]        "RATE_LIMIT_EXCEEDED": 429,
+[% endif %]    }
     status_code = status_map.get(exc.code, 500)
     return _build_error_response(exc, status_code)
 
