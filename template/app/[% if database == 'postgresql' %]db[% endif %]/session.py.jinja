@@ -15,7 +15,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel.ext.asyncio.session import AsyncSession
 [% endif %]
 from app.core.exceptions import PersistenceError
-
+[% if telemetry == "logfire" %]from app.core.telemetry import instrument_database
+[% endif %]
 
 class DatabaseSessionManager:
     """Own the engine and every transaction boundary."""
@@ -28,6 +29,8 @@ class DatabaseSessionManager:
         if self._engine is not None:
             raise RuntimeError("Database session manager is already initialized")
         engine = create_async_engine(database_url, pool_pre_ping=True)
+[% if telemetry == "logfire" %]        instrument_database(engine)
+[% endif %]
         session_factory = async_sessionmaker(
             bind=engine,
             class_=AsyncSession,

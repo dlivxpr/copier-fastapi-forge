@@ -13,6 +13,7 @@ from app.api.router import router
 from app.core.config import Settings
 [% if rate_limiting != "none" %]from app.core.rate_limit import RateLimiter
 [% endif %][% if background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]from app.core.redis import redis_resources
+[% endif %][% if telemetry == "logfire" %]from app.core.telemetry import instrument_http
 [% endif %][% if database == "postgresql" %]from app.db.session import database
 [% endif %]
 settings = Settings()
@@ -42,6 +43,8 @@ app = FastAPI(
     description="[[ project_description ]]",
     lifespan=lifespan,
 )
+[% if telemetry == "logfire" %]instrument_http(app)
+[% endif %]
 
 app.add_middleware(
     CORSMiddleware,

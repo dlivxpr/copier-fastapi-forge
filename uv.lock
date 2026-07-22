@@ -74,6 +74,7 @@ source = { virtual = "." }
 dev = [
     { name = "copier" },
     { name = "httpx" },
+    { name = "jinja2" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
@@ -86,6 +87,7 @@ dev = [
 dev = [
     { name = "copier", specifier = ">=9.10.2" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "jinja2", specifier = ">=3.1.6" },
     { name = "pytest", specifier = ">=8.4.1" },
     { name = "pytest-cov", specifier = ">=6.2.1" },
     { name = "ruff", specifier = ">=0.12.4" },

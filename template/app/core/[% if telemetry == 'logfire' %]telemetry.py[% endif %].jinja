@@ -1,0 +1,31 @@
+from __future__ import annotations
+
+from functools import cache
+
+import logfire
+from fastapi import FastAPI
+[% if database == "postgresql" %]from sqlalchemy.ext.asyncio import AsyncEngine
+[% endif %]
+
+@cache
+def configure_telemetry() -> None:
+    """Configure Logfire once for each application or worker process."""
+    logfire.configure(
+        service_name="[[ project_slug ]]",
+        send_to_logfire="if-token-present",
+        console=False,
+    )
+[% if background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]    logfire.instrument_redis(capture_statement=False)
+[% endif %][% if agent_capability == "pydantic-ai" %]    logfire.instrument_pydantic_ai(include_content=False, include_binary_content=False)
+[% endif %]
+[% if database == "postgresql" %]
+def instrument_database(engine: AsyncEngine) -> None:
+    """Instrument the generated SQLAlchemy engine."""
+    configure_telemetry()
+    logfire.instrument_sqlalchemy(engine=engine)
+
+[% endif %]
+def instrument_http(app: FastAPI) -> None:
+    """Instrument the generated FastAPI application."""
+    configure_telemetry()
+    logfire.instrument_fastapi(app)

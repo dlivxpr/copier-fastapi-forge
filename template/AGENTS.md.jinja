@@ -41,11 +41,15 @@ uv run uvicorn app.main:app --reload
 uv run pytest
 ```
 [% if background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]
-Redis 消费能力需要先启动共享实例：
+Redis 消费能力需要共享实例：
 
+[% if docker %]
 ```bash
-docker compose up -d redis
+docker compose -f deploy/compose.yaml up -d redis
 ```
+[% else %]
+在运行应用前，让 `REDIS_URL` 指向外部 Redis 实例。
+[% endif %]
 [% endif %]
 [% if background_tasks == "taskiq" %]
 后台任务使用以下独立进程：
@@ -66,9 +70,15 @@ This service follows a thin-route pattern:
 - **Routes** (`app/api/router.py`): HTTP concerns only — parse input, call service, return response.
 - **Core** (`app/core/`): Domain exceptions, configuration, pagination.
 - **Dependencies** (`app/api/deps.py`): FastAPI dependency injection for API key, configuration.
+[% if database == "none" %]- 本项目未启用持久化能力，不包含 ORM、migration 或数据库 session。
+[% else %]- **Persistence**: PostgreSQL 持久化使用 [[ orm ]]，遵循 `route -> service -> repository -> async database`。
+- **Transactions**: repository 只执行 `flush()` / `refresh()`；session manager 负责 `commit()` / `rollback()`。
+[% endif %]
 [% if agent_capability == "pydantic-ai" %]- **Agent** (`app/agents/assistant.py`): Pydantic AI agent and caller-owned runtime dependencies.
 - **Agent invocation** (`app/services/agent.py`): Shared single-turn JSON/SSE invocation semantics.
 - **Model interface**: Configure only `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL`.
+[% endif %]
+[% if telemetry == "logfire" %]- **Telemetry**: Logfire 观测已选择的 HTTP[% if database == "postgresql" %]、数据库[% endif %][% if background_tasks == "taskiq" %]、Taskiq[% endif %][% if agent_capability == "pydantic-ai" %] 和 Agent[% endif %] 路径；模型内容采集保持关闭。
 [% endif %]
 
 All business routes are protected by a deployment-level API key. Health probes (`/health/live`, `/health/ready`) are public.

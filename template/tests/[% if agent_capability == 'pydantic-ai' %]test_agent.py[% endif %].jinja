@@ -90,7 +90,7 @@ async def tool_stream(
         yield "test-model"
 
 
-def test_production_dependencies_construct_compatible_model_service() -> None:
+async def test_production_dependencies_construct_compatible_model_service() -> None:
     settings = Settings(
         llm_base_url="https://gateway.example/v1",
         llm_api_key="test-key",

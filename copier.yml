@@ -67,6 +67,36 @@ agent_capability:
     Pydantic AI: pydantic-ai
   default: none
 
+telemetry:
+  type: str
+  help: Observability integration
+  choices:
+    No telemetry: none
+    Logfire: logfire
+  default: none
+
+docker:
+  type: bool
+  help: Generate Docker deployment assets
+  default: true
+
+reverse_proxy:
+  type: str
+  help: External reverse proxy configuration
+  choices:
+    No reverse proxy: none
+    Nginx: nginx
+  default: none
+  when: "[[ docker ]]"
+
+ci:
+  type: str
+  help: Continuous integration provider
+  choices:
+    No CI: none
+    GitHub Actions: github
+  default: github
+
 enable_caching:
   type: bool
   help: Enable Redis-backed HTTP response caching

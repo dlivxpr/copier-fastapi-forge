@@ -31,6 +31,9 @@ dependencies = [
 [% if agent_capability == "pydantic-ai" %]
     "pydantic-ai-slim[openai]>=2.0.0",
 [% endif %]
+[% if telemetry == "logfire" %]
+    "logfire[fastapi[% if database == 'postgresql' %],sqlalchemy[% endif %][% if background_tasks == 'taskiq' or enable_caching or rate_limiting == 'redis' %],redis[% endif %][% if agent_capability == 'pydantic-ai' %],pydantic-ai[% endif %]]>=4.0.0",
+[% endif %]
     "uvicorn[standard]>=0.34.0",
 ]
 

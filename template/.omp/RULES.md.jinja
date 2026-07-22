@@ -41,5 +41,8 @@
 [% else %]
 - 本项目未启用智能体能力，不包含模型配置、Agent route 或 Pydantic AI 依赖。
 [% endif %]
+[% if telemetry == "logfire" %]
+- Logfire 是唯一 telemetry integration；观测已选 HTTP[% if database == "postgresql" %]、数据库[% endif %][% if background_tasks == "taskiq" %]、Taskiq[% endif %][% if agent_capability == "pydantic-ai" %] 和 Agent[% endif %] 路径，保持模型内容采集关闭。
+[% endif %]
 - 不要引入未明确要求的第三方依赖。
 - 所有 I/O 操作使用 async。

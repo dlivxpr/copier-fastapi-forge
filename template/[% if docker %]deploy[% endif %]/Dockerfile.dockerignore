@@ -1,0 +1,11 @@
+.git
+.github
+.omp
+.pytest_cache
+.ruff_cache
+.venv
+__pycache__
+*.py[cod]
+.coverage
+htmlcov
+.env

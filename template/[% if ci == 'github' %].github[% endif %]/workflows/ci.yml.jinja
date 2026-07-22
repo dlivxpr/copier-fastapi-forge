@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+[% if database == "postgresql" or background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]    services:
+[% if database == "postgresql" %]      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: app
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d app"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+[% endif %][% if background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+[% endif %][% endif %]    env:
+[% if database == "postgresql" %]      DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/app
+[% endif %][% if background_tasks == "taskiq" or enable_caching or rate_limiting == "redis" %]      REDIS_URL: redis://127.0.0.1:6379/0
+[% endif %][% if telemetry == "logfire" %]      LOGFIRE_SEND_TO_LOGFIRE: "false"
+[% endif %]    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install [[ python_version ]]
+      - run: uv sync --all-groups
+[% if database == "postgresql" %]      - run: uv run alembic upgrade head
+[% endif %]      - run: uv run python -m compileall -q app tests
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run ty check
+      - run: uv run pytest
+      - name: Runtime smoke
+        run: uv run python -c "from app.main import app; assert app.title"
