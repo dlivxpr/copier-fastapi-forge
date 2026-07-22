@@ -1,0 +1,39 @@
+"""Item CRUD routes."""
+
+from typing import Annotated, Any
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, status
+
+from app.api.deps import DBSession
+from app.schemas.item import ItemCreate, ItemRead, ItemUpdate
+from app.services.item import ItemService
+
+router = APIRouter(prefix="/items", tags=["items"])
+
+
+def get_item_service(db: DBSession) -> ItemService:
+    return ItemService(db)
+
+
+ItemSvc = Annotated[ItemService, Depends(get_item_service)]
+
+
+@router.post("", response_model=ItemRead, status_code=status.HTTP_201_CREATED)
+async def create_item(data: ItemCreate, service: ItemSvc) -> Any:
+    return await service.create(data=data)
+
+
+@router.get("/{item_id}", response_model=ItemRead)
+async def get_item(item_id: UUID, service: ItemSvc) -> Any:
+    return await service.get(item_id=item_id)
+
+
+@router.patch("/{item_id}", response_model=ItemRead)
+async def update_item(item_id: UUID, data: ItemUpdate, service: ItemSvc) -> Any:
+    return await service.update(item_id=item_id, data=data)
+
+
+@router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+async def delete_item(item_id: UUID, service: ItemSvc) -> None:
+    await service.delete(item_id=item_id)

@@ -10,3 +10,19 @@ uv run [[ project_slug ]] server run --port [[ backend_port ]]
 ```
 
 公开探针：`/health`、`/health/live`、`/health/ready`。业务 API 使用 `X-API-Key` 请求头。
+[% if database == "postgresql" %]
+
+## PostgreSQL
+
+配置 `POSTGRES_HOST`、`POSTGRES_PORT`、`POSTGRES_USER`、`POSTGRES_PASSWORD` 和 `POSTGRES_DB`，再运行：
+
+```bash
+uv run [[ project_slug ]] db upgrade
+uv run [[ project_slug ]] db current
+```
+
+数据库访问使用 [[ "SQLAlchemy" if orm_type == "sqlalchemy" else "SQLModel" ]] async session；API 请求成功时统一提交，异常时统一回滚。
+[% if include_example_crud %]
+
+Item 示例 API：`POST /api/v1/items`、`GET /api/v1/items/{item_id}`、`PATCH /api/v1/items/{item_id}`、`DELETE /api/v1/items/{item_id}`。
+[% endif %][% endif %]

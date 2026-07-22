@@ -1,0 +1,44 @@
+"""Item business operations."""
+
+from uuid import UUID
+
+[% if orm_type == "sqlalchemy" %]from sqlalchemy.ext.asyncio import AsyncSession
+[% else %]from sqlmodel.ext.asyncio.session import AsyncSession
+[% endif %]
+from app.core.exceptions import NotFoundError
+from app.db.models.item import Item
+from app.repositories import item as item_repo
+from app.schemas.item import ItemCreate, ItemUpdate
+
+
+class ItemService:
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+
+    async def get(self, *, item_id: UUID) -> Item:
+        item = await item_repo.get_by_id(self.db, item_id)
+        if item is None:
+            raise NotFoundError(
+                message="Item not found",
+                details={"item_id": str(item_id)},
+            )
+        return item
+
+    async def create(self, *, data: ItemCreate) -> Item:
+        return await item_repo.create(
+            self.db,
+            name=data.name,
+            description=data.description,
+            is_published=data.is_published,
+        )
+
+    async def update(self, *, item_id: UUID, data: ItemUpdate) -> Item:
+        item = await self.get(item_id=item_id)
+        update_data = data.model_dump(exclude_unset=True)
+        if not update_data:
+            return item
+        return await item_repo.update(self.db, db_item=item, update_data=update_data)
+
+    async def delete(self, *, item_id: UUID) -> None:
+        await self.get(item_id=item_id)
+        await item_repo.delete(self.db, item_id)

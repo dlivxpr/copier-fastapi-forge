@@ -16,6 +16,8 @@ dependencies = [
 [% if database == "postgresql" %]
     "alembic>=1.16.0",
     "asyncpg>=0.30.0",
+    "greenlet>=3.2.0",
+    "psycopg2-binary>=2.9.10",
 [% if orm_type == "sqlalchemy" %]
     "sqlalchemy[asyncio]>=2.0.41",
 [% else %]

@@ -103,3 +103,177 @@ allowed_transformations = ["Copier 模板语法", "删除未启用能力命令"]
 removed_references = ["用户、Celery、database 与 Taskiq commands（后两者由后续 slice 恢复）"]
 approved_deviation = ["server commands 始终生成"]
 verification = ["test_minimal_project_passes_http_and_cli_runtime_contract"]
+
+# Issue #8 PostgreSQL 与 Item CRUD profile。profile 参与 manifest key，避免不同 ORM
+# 对同一路径的渲染结果互相覆盖。
+
+[[target]]
+profile = "postgresql_sqlalchemy_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/pyproject.toml"
+target = "pyproject.toml"
+allowed_transformations = ["Copier 模板语法", "删除 V1 排除依赖", "保留 PostgreSQL 与 SQLAlchemy 依赖"]
+removed_references = ["用户/JWT、frontend、排除能力依赖"]
+approved_deviation = ["psycopg2-binary 仅供 Alembic 同步 URL", "依赖版本按当前兼容范围归一化"]
+verification = ["test_postgresql_questions_and_orm_rendering_follow_legacy_contract", "test_both_orms_pass_real_postgresql_contract"]
+
+[[target]]
+profile = "postgresql_sqlmodel_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/pyproject.toml"
+target = "pyproject.toml"
+allowed_transformations = ["Copier 模板语法", "删除 V1 排除依赖", "保留 PostgreSQL 与 SQLModel 依赖"]
+removed_references = ["用户/JWT、frontend、排除能力依赖"]
+approved_deviation = ["SQLModel 与 SQLAlchemy 分支互斥", "依赖版本按当前兼容范围归一化"]
+verification = ["test_postgresql_questions_and_orm_rendering_follow_legacy_contract", "test_both_orms_pass_real_postgresql_contract"]
+
+[[target]]
+profile = "postgresql_sqlalchemy_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/main.py"
+target = "app/main.py"
+allowed_transformations = ["Copier 模板语法", "删除 V1 排除生命周期", "保留数据库资源关闭"]
+removed_references = ["用户/JWT、RAG、消息渠道、billing、admin 生命周期"]
+approved_deviation = ["数据库 engine 在 session 模块初始化，lifespan 仅负责 close_db"]
+verification = ["test_postgresql_cli_health_and_lifespan_runtime_contract"]
+
+[[target]]
+profile = "postgresql_sqlalchemy_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/db/base.py"
+target = "app/db/base.py"
+allowed_transformations = ["Copier 模板语法", "仅保留 SQLAlchemy 分支"]
+removed_references = ["无"]
+approved_deviation = ["无差异"]
+verification = ["test_both_orms_pass_real_postgresql_contract"]
+
+[[target]]
+profile = "postgresql_sqlmodel_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/db/base.py"
+target = "app/db/base.py"
+allowed_transformations = ["Copier 模板语法", "仅保留 SQLModel 分支"]
+removed_references = ["无"]
+approved_deviation = ["Base 保留 SQLModel.metadata 公开入口"]
+verification = ["test_both_orms_pass_real_postgresql_contract"]
+
+[[target]]
+profile = "postgresql_sqlalchemy_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/db/session.py"
+target = "app/db/session.py"
+allowed_transformations = ["Copier 模板语法", "仅保留 SQLAlchemy AsyncSession import"]
+removed_references = ["Celery 与 ARQ 文案"]
+approved_deviation = ["可选 Logfire instrumentation 由条件块接入"]
+verification = ["test_both_orms_pass_real_postgresql_contract"]
+
+[[target]]
+profile = "postgresql_sqlmodel_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/db/session.py"
+target = "app/db/session.py"
+allowed_transformations = ["Copier 模板语法", "AsyncSession 替换为 SQLModel 实现"]
+removed_references = ["Celery 与 ARQ 文案"]
+approved_deviation = ["共享 transaction contract 保持不变"]
+verification = ["test_both_orms_pass_real_postgresql_contract"]
+
+[[target]]
+profile = "postgresql_sqlalchemy_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/api/deps.py"
+target = "app/api/deps.py"
+allowed_transformations = ["删除身份依赖", "deployment API Key 替换", "恢复 DBSession"]
+removed_references = ["CurrentUser、JWT、分页依赖"]
+approved_deviation = ["DBSession 直接绑定 get_db_session"]
+verification = ["test_postgresql_cli_health_and_lifespan_runtime_contract"]
+
+[[target]]
+profile = "postgresql_sqlalchemy_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/api/routes/v1/health.py"
+target = "app/api/health.py"
+allowed_transformations = ["根路径迁移", "仅保留 PostgreSQL readiness"]
+removed_references = ["Redis、RAG、LLM provider、billing、Celery probes"]
+approved_deviation = ["readiness 通过 DBSession 执行 SELECT 1"]
+verification = ["test_postgresql_cli_health_and_lifespan_runtime_contract"]
+
+[[target]]
+profile = "postgresql_sqlalchemy_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/alembic/env.py"
+target = "alembic/env.py"
+allowed_transformations = ["backend 移至项目根", "删除排除 model imports", "保留 Item metadata import"]
+removed_references = ["用户、billing、RAG、消息渠道与其他删除模型"]
+approved_deviation = ["online migration 使用 Settings.DATABASE_URL"]
+verification = ["test_both_orms_pass_real_postgresql_contract"]
+
+[[target]]
+profile = "postgresql_sqlalchemy_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/cli/commands.py"
+target = "cli/commands.py"
+allowed_transformations = ["删除排除命令", "保留 server 与 database commands"]
+removed_references = ["用户、Celery、Taskiq 与 custom commands"]
+approved_deviation = ["database 命令保留 legacy 名称与参数"]
+verification = ["test_postgresql_cli_health_and_lifespan_runtime_contract"]
+
+[[target]]
+profile = "postgresql_sqlalchemy_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/api/router.py"
+target = "app/api/router.py"
+allowed_transformations = ["删除 API versioning 与排除 routes", "挂载 Item router"]
+removed_references = ["用户、billing、RAG、消息渠道、admin routes"]
+approved_deviation = ["deployment API Key 由 api_router 统一保护"]
+verification = ["test_both_orms_pass_real_postgresql_contract"]
+
+[[target]]
+profile = "postgresql_sqlalchemy_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/db/models/item.py"
+target = "app/db/models/item.py"
+allowed_transformations = ["Copier 模板语法", "删除 owner 外键与 relationship"]
+removed_references = ["owner_id、users.id ForeignKey、User relationship"]
+approved_deviation = ["Item 成为无身份资源"]
+verification = ["test_item_crud_switch_controls_the_complete_generated_slice", "test_both_orms_pass_real_postgresql_contract"]
+
+[[target]]
+profile = "postgresql_sqlmodel_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/db/models/item.py"
+target = "app/db/models/item.py"
+allowed_transformations = ["Copier 模板语法", "迁移到 SQLModel table model", "删除 owner 外键与 relationship"]
+removed_references = ["owner_id、users.id ForeignKey、User relationship"]
+approved_deviation = ["SQLModel 分支使用 Field 与 Column 表达同一表结构"]
+verification = ["test_both_orms_pass_real_postgresql_contract"]
+
+[[target]]
+profile = "postgresql_sqlalchemy_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/repositories/item.py"
+target = "app/repositories/item.py"
+allowed_transformations = ["删除 owner 与 list 查询", "保留 flush 与 refresh"]
+removed_references = ["owner_id、list_for_owner、count、分页"]
+approved_deviation = ["事务由 session manager 独占"]
+verification = ["test_both_orms_pass_real_postgresql_contract"]
+
+[[target]]
+profile = "postgresql_sqlalchemy_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/services/item.py"
+target = "app/services/item.py"
+allowed_transformations = ["删除 owner 检查与 list service"]
+removed_references = ["owner_id、CurrentUser ownership、list"]
+approved_deviation = ["缺失 Item 继续使用 legacy NotFoundError message 与 details"]
+verification = ["test_both_orms_pass_real_postgresql_contract"]
+
+[[target]]
+profile = "postgresql_sqlalchemy_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/schemas/item.py"
+target = "app/schemas/item.py"
+allowed_transformations = ["删除 owner 与分页 schema"]
+removed_references = ["owner_id、ItemList"]
+approved_deviation = ["create、update、read 字段约束保持 legacy"]
+verification = ["test_item_crud_switch_controls_the_complete_generated_slice"]
+
+[[target]]
+profile = "postgresql_sqlalchemy_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/api/routes/v1/items.py"
+target = "app/api/items.py"
+allowed_transformations = ["删除 CurrentUser、owner 与 list endpoint", "路由前缀移至模块"]
+removed_references = ["list endpoint、Query pagination、CurrentUser"]
+approved_deviation = ["保留 create、get、update、delete HTTP contract"]
+verification = ["test_both_orms_pass_real_postgresql_contract"]
+
+[[target]]
+profile = "postgresql_sqlalchemy_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/alembic/versions/0021_create_items.py"
+target = "alembic/versions/0021_create_items.py"
+allowed_transformations = ["删除 owner 外键与 index", "重置为初始 migration"]
+removed_references = ["owner_id、users.id ForeignKey、ix_items_owner_id、legacy down_revision"]
+approved_deviation = ["保留 revision 0021_create_items 身份且 down_revision=None"]
+verification = ["test_item_crud_switch_controls_the_complete_generated_slice", "test_both_orms_pass_real_postgresql_contract"]

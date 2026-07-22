@@ -1,0 +1,47 @@
+"""Item database model."""
+
+import uuid
+
+[% if orm_type == "sqlalchemy" %]from sqlalchemy import Boolean, String, Text
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db.base import Base, TimestampMixin
+
+
+class Item(Base, TimestampMixin):
+    """Example persisted resource."""
+
+    __tablename__ = "items"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+[% else %]from sqlalchemy import Boolean, Column, String, Text
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlmodel import Field, SQLModel
+
+from app.db.base import TimestampMixin
+
+
+class Item(TimestampMixin, SQLModel, table=True):
+    """Example persisted resource."""
+
+    __tablename__ = "items"
+
+    id: uuid.UUID = Field(
+        default_factory=uuid.uuid4,
+        sa_column=Column(PG_UUID(as_uuid=True), primary_key=True),
+    )
+    name: str = Field(sa_column=Column(String(255), nullable=False))
+    description: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    is_published: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, default=False, nullable=False),
+    )
+[% endif %]
+    def __repr__(self) -> str:
+        return f"<Item(id={self.id}, name={self.name!r})>"

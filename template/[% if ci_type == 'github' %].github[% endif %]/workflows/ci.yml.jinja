@@ -31,8 +31,13 @@ jobs:
           --health-timeout 3s
           --health-retries 15
 [% endif %][% endif %]    env:
-[% if database == "postgresql" %]      DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/app
-[% endif %][% if enable_redis %]      REDIS_URL: redis://127.0.0.1:6379/0
+[% if database == "postgresql" %]      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app
+[% endif %][% if enable_redis %]      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
 [% endif %][% if enable_logfire %]      LOGFIRE_SEND_TO_LOGFIRE: "false"
 [% endif %]    steps:
       - uses: actions/checkout@v4

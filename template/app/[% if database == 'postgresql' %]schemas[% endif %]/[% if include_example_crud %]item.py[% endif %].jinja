@@ -1,0 +1,31 @@
+"""Item request and response schemas."""
+
+from uuid import UUID
+
+from pydantic import Field
+
+from app.schemas.base import BaseSchema, TimestampSchema
+
+
+class ItemBase(BaseSchema):
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=10_000)
+    is_published: bool = False
+
+
+class ItemCreate(ItemBase):
+    """Payload for creating an Item."""
+
+
+class ItemUpdate(BaseSchema):
+    """Payload for updating an Item."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=10_000)
+    is_published: bool | None = None
+
+
+class ItemRead(ItemBase, TimestampSchema):
+    """Serialized Item response."""
+
+    id: UUID

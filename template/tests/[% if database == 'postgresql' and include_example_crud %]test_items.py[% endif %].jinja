@@ -1,0 +1,125 @@
+from __future__ import annotations
+
+from typing import Any
+from uuid import UUID
+
+import pytest
+from fastapi import APIRouter, Depends
+from httpx import AsyncClient
+[% if orm_type == "sqlalchemy" %]from sqlalchemy import text
+[% endif %]from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.pool import NullPool
+[% if orm_type == "sqlmodel" %]from sqlmodel import select
+[% endif %]
+from app.api.deps import DBSession, verify_api_key
+from app.db.session import get_worker_db_context
+from app.main import app
+from app.repositories import item as item_repo
+
+pytestmark = pytest.mark.anyio
+
+rollback_item_id: UUID | None = None
+rollback_router = APIRouter(
+    prefix="/api/v1",
+    dependencies=[Depends(verify_api_key)],
+)
+
+
+@rollback_router.post("/transaction-rollback-probe")
+async def transaction_rollback_probe(db: DBSession) -> None:
+    global rollback_item_id
+    item = await item_repo.create(db, name="rollback probe")
+    rollback_item_id = item.id
+    raise RuntimeError("force request rollback")
+
+
+app.include_router(rollback_router)
+
+
+async def test_item_crud_commits_and_preserves_error_contract(
+    client: AsyncClient,
+    api_key_headers: dict[str, str],
+) -> None:
+    created = await client.post(
+        "/api/v1/items",
+        headers=api_key_headers,
+        json={
+            "name": "first item",
+            "description": "created through the public API",
+            "is_published": False,
+        },
+    )
+    assert created.status_code == 201
+    item_id = created.json()["id"]
+    assert created.json()["name"] == "first item"
+    assert created.json()["description"] == "created through the public API"
+    assert created.json()["is_published"] is False
+    assert "created_at" in created.json()
+
+    fetched = await client.get(f"/api/v1/items/{item_id}", headers=api_key_headers)
+    assert fetched.status_code == 200
+    assert fetched.json()["id"] == item_id
+
+    updated = await client.patch(
+        f"/api/v1/items/{item_id}",
+        headers=api_key_headers,
+        json={"name": "updated item", "is_published": True},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["name"] == "updated item"
+    assert updated.json()["is_published"] is True
+
+    deleted = await client.delete(f"/api/v1/items/{item_id}", headers=api_key_headers)
+    assert deleted.status_code == 204
+
+    missing = await client.get(f"/api/v1/items/{item_id}", headers=api_key_headers)
+    assert missing.status_code == 404
+    assert missing.json() == {
+        "error": {
+            "code": "NOT_FOUND",
+            "message": "Item not found",
+            "details": {"item_id": item_id},
+        }
+    }
+
+
+async def test_request_failure_rolls_back_flushed_item(
+    client: AsyncClient,
+    api_key_headers: dict[str, str],
+) -> None:
+    global rollback_item_id
+    rollback_item_id = None
+    failed = await client.post(
+        "/api/v1/transaction-rollback-probe",
+        headers=api_key_headers,
+    )
+    assert failed.status_code == 500
+    assert rollback_item_id is not None
+
+    missing = await client.get(
+        f"/api/v1/items/{rollback_item_id}",
+        headers=api_key_headers,
+    )
+    assert missing.status_code == 404
+
+
+async def test_worker_context_uses_null_pool_and_disposes_engine(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    disposed: list[AsyncEngine] = []
+    original_dispose = AsyncEngine.dispose
+
+    async def tracked_dispose(self: AsyncEngine, *args: Any, **kwargs: Any) -> None:
+        disposed.append(self)
+        await original_dispose(self, *args, **kwargs)
+
+    monkeypatch.setattr(AsyncEngine, "dispose", tracked_dispose)
+
+    async with get_worker_db_context() as session:
+        worker_engine = session.bind
+        assert isinstance(worker_engine, AsyncEngine)
+        assert isinstance(worker_engine.pool, NullPool)
+[% if orm_type == "sqlalchemy" %]        await session.execute(text("SELECT 1"))
+[% else %]        await session.exec(select(1))
+[% endif %]
+    assert worker_engine in disposed

@@ -391,6 +391,8 @@ def _legacy_context(profile: dict[str, object]) -> dict[str, object]:
             "use_database": profile["database"] == "postgresql",
             "use_jwt": False,
             "use_postgresql": profile["database"] == "postgresql",
+            "use_sqlalchemy": profile.get("orm_type") == "sqlalchemy",
+            "use_sqlmodel": profile.get("orm_type") == "sqlmodel",
             "use_pydantic_ai": profile["ai_framework"] == "pydantic_ai",
             "use_ai": profile["ai_framework"] == "pydantic_ai",
         }
@@ -409,15 +411,8 @@ def test_migration_equivalence_manifest_rejects_unregistered_content(
     )
     records = trace["target"]
     protected = manifest["protected"]
-    assert {record["target"] for record in records} == set(protected)
-    for record in records:
-        assert record["legacy_source"]
-        assert record["allowed_transformations"]
-        assert record["removed_references"]
-        assert record["approved_deviation"]
-        assert record["verification"]
 
-    profile = {
+    base_profile = {
         **minimal_answers(),
         "project_name": "equivalence_service",
         "project_slug": "equivalence_service",
@@ -429,24 +424,60 @@ def test_migration_equivalence_manifest_rejects_unregistered_content(
         "backend_port": 8000,
         "deployment_api_key": "change-me-in-production",
     }
-    project = render_project(tmp_path / "target", profile)
+    profiles = {
+        "minimal": base_profile,
+        "postgresql_sqlalchemy_items": {
+            **base_profile,
+            "database": "postgresql",
+            "orm_type": "sqlalchemy",
+            "include_example_crud": True,
+        },
+        "postgresql_sqlmodel_items": {
+            **base_profile,
+            "database": "postgresql",
+            "orm_type": "sqlmodel",
+            "include_example_crud": True,
+        },
+    }
+
+    def manifest_key(record: dict[str, object]) -> str:
+        profile_name = str(record.get("profile", "minimal"))
+        target_path = str(record["target"])
+        return target_path if profile_name == "minimal" else f"{profile_name}:{target_path}"
+
+    assert {manifest_key(record) for record in records} == set(protected)
+    for record in records:
+        assert record["legacy_source"]
+        assert record["allowed_transformations"]
+        assert record["removed_references"]
+        assert record["approved_deviation"]
+        assert record["verification"]
+        assert str(record.get("profile", "minimal")) in profiles
+
+    projects = {
+        profile_name: render_project(tmp_path / profile_name, profile)
+        for profile_name, profile in profiles.items()
+    }
     legacy_root = TEMPLATE_ROOT / "legacy" / "template" / "{{cookiecutter.project_slug}}"
     environment = Environment(
         loader=FileSystemLoader(legacy_root),
         undefined=StrictUndefined,
         keep_trailing_newline=True,
     )
-    context = {"cookiecutter": _legacy_context(profile)}
 
     observed: dict[str, dict[str, str]] = {}
     for record in records:
-        target_path = record["target"]
-        source_path = record["legacy_source"].removeprefix(
+        profile_name = str(record.get("profile", "minimal"))
+        profile = profiles[profile_name]
+        target_path = str(record["target"])
+        source_path = str(record["legacy_source"]).removeprefix(
             "legacy/template/{{cookiecutter.project_slug}}/"
         )
-        legacy_content = environment.get_template(source_path).render(context)
-        target_content = (project / target_path).read_text(encoding="utf-8")
-        observed[target_path] = {
+        legacy_content = environment.get_template(source_path).render(
+            {"cookiecutter": _legacy_context(profile)}
+        )
+        target_content = (projects[profile_name] / target_path).read_text(encoding="utf-8")
+        observed[manifest_key(record)] = {
             "legacy_sha256": _normalized_digest(legacy_content),
             "target_sha256": _normalized_digest(target_content),
             "normalized_diff_sha256": _normalized_diff_digest(

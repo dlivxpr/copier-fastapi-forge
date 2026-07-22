@@ -12,7 +12,7 @@ from app.api.router import api_router
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.core.middleware import RequestIDMiddleware
-[% if database == "postgresql" %]from app.db.session import database
+[% if database == "postgresql" %]from app.db.session import close_db
 [% endif -%]
 [% if enable_redis %]from app.core.redis import redis_resources
 [% endif -%]
@@ -20,13 +20,12 @@ from app.core.middleware import RequestIDMiddleware
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Initialize and close resources owned by the API process."""
-[% if database == "postgresql" %]    database.initialize(settings.DATABASE_URL)
-[% endif %][% if enable_redis %]    redis_resources.initialize(settings.REDIS_URL)
+[% if enable_redis %]    redis_resources.initialize(settings.REDIS_URL)
 [% endif %][% if database == "postgresql" or enable_redis %]    try:
         yield
     finally:
 [% if enable_redis %]        await redis_resources.close()
-[% endif %][% if database == "postgresql" %]        await database.close()
+[% endif %][% if database == "postgresql" %]        await close_db()
 [% endif %][% else %]    yield
 [% endif %]
 

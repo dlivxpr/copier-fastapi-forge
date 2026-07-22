@@ -2,9 +2,11 @@
 
 import click
 import uvicorn
-from tabulate import tabulate
+[% if database == "postgresql" %]from alembic.config import Config
+[% endif %]from tabulate import tabulate
 
-from app.main import app
+[% if database == "postgresql" %]from alembic import command
+[% endif %]from app.main import app
 
 
 @click.group()
@@ -39,7 +41,56 @@ def server_routes() -> None:
         for method in methods - {"HEAD", "OPTIONS"}:
             routes.append([method, path, getattr(route, "name", "-")])
     click.echo(tabulate(routes, headers=["Method", "Path", "Name"]))
+[% if database == "postgresql" %]
 
+@cli.group("db")
+def db_cli() -> None:
+    """Database commands."""
+
+
+@db_cli.command("init")
+def db_init() -> None:
+    """Initialize the database by running all migrations."""
+    click.echo("Initializing database...")
+    command.upgrade(Config("alembic.ini"), "head")
+    click.secho("Database initialized.", fg="green")
+
+
+@db_cli.command("migrate")
+@click.option("-m", "--message", required=True, help="Migration message")
+def db_migrate(message: str) -> None:
+    """Create a new migration."""
+    command.revision(Config("alembic.ini"), message=message, autogenerate=True)
+    click.secho(f"Migration created: {message}", fg="green")
+
+
+@db_cli.command("upgrade")
+@click.option("--revision", default="head", help="Revision to upgrade to")
+def db_upgrade(revision: str) -> None:
+    """Run database migrations."""
+    command.upgrade(Config("alembic.ini"), revision)
+    click.secho(f"Upgraded to: {revision}", fg="green")
+
+
+@db_cli.command("downgrade")
+@click.option("--revision", default="-1", help="Revision to downgrade to")
+def db_downgrade(revision: str) -> None:
+    """Roll back database migrations."""
+    command.downgrade(Config("alembic.ini"), revision)
+    click.secho(f"Downgraded to: {revision}", fg="green")
+
+
+@db_cli.command("current")
+def db_current() -> None:
+    """Show the current migration revision."""
+    command.current(Config("alembic.ini"))
+
+
+@db_cli.command("history")
+def db_history() -> None:
+    """Show migration history."""
+    command.history(Config("alembic.ini"))
+[% endif %]
 
 if __name__ == "__main__":
     cli()

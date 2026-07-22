@@ -3,5 +3,8 @@
 from fastapi import APIRouter
 
 from app.api.deps import RequireApiKey
-
+[% if database == "postgresql" and include_example_crud %]from app.api.items import router as items_router
+[% endif %]
 api_router = APIRouter(dependencies=[RequireApiKey])
+[% if database == "postgresql" and include_example_crud %]api_router.include_router(items_router)
+[% endif -%]

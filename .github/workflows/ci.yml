@@ -54,27 +54,32 @@ jobs:
             data: '{}'
             migrate: false
           - name: postgresql-sqlalchemy-logfire
-            data: '{"database":"postgresql","orm":"sqlalchemy","telemetry":"logfire"}'
+            data: '{"database":"postgresql","orm_type":"sqlalchemy","enable_logfire":true,"include_example_crud":true}'
             migrate: true
           - name: postgresql-sqlmodel
-            data: '{"database":"postgresql","orm":"sqlmodel","docker":false}'
+            data: '{"database":"postgresql","orm_type":"sqlmodel","enable_docker":false,"include_example_crud":true}'
             migrate: true
           - name: taskiq-redis-consumers
-            data: '{"background_tasks":"taskiq","enable_caching":true,"rate_limiting":"redis","rate_limit_requests":2,"rate_limit_period_seconds":1}'
+            data: '{"background_tasks":"taskiq","enable_redis":true,"enable_caching":true,"enable_rate_limiting":true,"rate_limit_storage":"redis","rate_limit_requests":2,"rate_limit_period":1}'
             migrate: false
           - name: pydantic-ai-logfire
-            data: '{"agent_capability":"pydantic-ai","telemetry":"logfire","docker":false}'
+            data: '{"ai_framework":"pydantic_ai","enable_logfire":true,"enable_docker":false}'
             migrate: false
           - name: full-nginx
-            data: '{"database":"postgresql","orm":"sqlalchemy","background_tasks":"taskiq","agent_capability":"pydantic-ai","telemetry":"logfire","enable_caching":true,"rate_limiting":"redis","rate_limit_requests":2,"rate_limit_period_seconds":1,"reverse_proxy":"nginx"}'
+            data: '{"database":"postgresql","orm_type":"sqlalchemy","background_tasks":"taskiq","ai_framework":"pydantic_ai","enable_logfire":true,"enable_redis":true,"enable_caching":true,"enable_rate_limiting":true,"rate_limit_storage":"redis","rate_limit_requests":2,"rate_limit_period":1,"enable_docker":true,"reverse_proxy":"nginx_external"}'
             migrate: true
           - name: docker-ci-off
-            data: '{"docker":false,"ci":"none","rate_limiting":"memory","rate_limit_requests":2,"rate_limit_period_seconds":1}'
+            data: '{"enable_docker":false,"ci_type":"none","enable_rate_limiting":true,"rate_limit_storage":"memory","rate_limit_requests":2,"rate_limit_period":1}'
             migrate: false
     name: generated-${{ matrix.name }}
     env:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/app
-      REDIS_URL: redis://127.0.0.1:6379/0
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
       LOGFIRE_SEND_TO_LOGFIRE: 'false'
     steps:
       - uses: actions/checkout@v4
