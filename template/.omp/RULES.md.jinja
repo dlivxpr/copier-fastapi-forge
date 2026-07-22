@@ -28,11 +28,18 @@
 ## Constraints
 
 [% if database == "none" %]
-- 本项目不包含数据库、缓存、任务队列或智能体能力。
+- 本项目未启用持久化能力，不包含 ORM、migration、repository 或数据库 session。
 [% else %]
 - PostgreSQL 持久化使用 [[ orm ]]；变更 model 时同步新增 Alembic migration。
 - 业务调用保持 `route -> service -> repository -> async database` 分层。
 - repository 只执行 `flush()` / `refresh()`；`app/db/session.py` 独占 `commit()` / `rollback()`。
+[% endif %]
+[% if agent_capability == "pydantic-ai" %]
+- 智能体能力使用 Pydantic AI，通过 `LLM_BASE_URL`、`LLM_API_KEY` 和 `LLM_MODEL` 连接 OpenAI Chat Completions-compatible 接口。
+- `/api/v1/agent/run` 与 `/api/v1/agent/stream` 只接受当前输入；不要引入 conversation、历史消息或跨请求可变状态。
+- Agent runtime 依赖由 `app/api/deps.py` 构造并显式传入，测试使用 deterministic model adapter。
+[% else %]
+- 本项目未启用智能体能力，不包含模型配置、Agent route 或 Pydantic AI 依赖。
 [% endif %]
 - 不要引入未明确要求的第三方依赖。
 - 所有 I/O 操作使用 async。

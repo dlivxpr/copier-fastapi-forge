@@ -1,0 +1,79 @@
+from __future__ import annotations
+
+from collections.abc import AsyncGenerator
+from dataclasses import dataclass
+from typing import Any
+
+from pydantic_ai import (
+    AgentRunResultEvent,
+    FunctionToolCallEvent,
+    FunctionToolResultEvent,
+    PartDeltaEvent,
+    PartStartEvent,
+    TextPart,
+    TextPartDelta,
+)
+from pydantic_core import to_jsonable_python
+
+from app.agents.assistant import AgentDependencies, AssistantAgent
+from app.core.exceptions import AgentInvocationError
+
+
+@dataclass(frozen=True, slots=True)
+class AgentStreamFrame:
+    event: str
+    data: dict[str, Any]
+
+
+class AgentInvocationService:
+    def __init__(self, agent: AssistantAgent, dependencies: AgentDependencies) -> None:
+        self._agent = agent
+        self._dependencies = dependencies
+
+    async def run(self, current_input: str) -> str:
+        try:
+            result = await self._agent.run(current_input, deps=self._dependencies)
+        except Exception:
+            raise AgentInvocationError from None
+        return result.output
+
+    async def stream(self, current_input: str) -> AsyncGenerator[AgentStreamFrame, None]:
+        try:
+            async with self._agent.run_stream_events(
+                current_input,
+                deps=self._dependencies,
+            ) as events:
+                async for event in events:
+                    if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
+                        yield AgentStreamFrame("content", {"delta": event.part.content})
+                    elif isinstance(event, PartDeltaEvent) and isinstance(
+                        event.delta, TextPartDelta
+                    ):
+                        yield AgentStreamFrame("content", {"delta": event.delta.content_delta})
+                    elif isinstance(event, FunctionToolCallEvent):
+                        yield AgentStreamFrame(
+                            "tool_call",
+                            {
+                                "tool_name": event.part.tool_name,
+                                "tool_call_id": event.part.tool_call_id,
+                                "args": event.part.args_as_dict(),
+                            },
+                        )
+                    elif isinstance(event, FunctionToolResultEvent):
+                        yield AgentStreamFrame(
+                            "tool_result",
+                            {
+                                "tool_call_id": event.tool_call_id,
+                                "content": to_jsonable_python(event.part.content),
+                            },
+                        )
+                    elif isinstance(event, AgentRunResultEvent):
+                        yield AgentStreamFrame("complete", {"output": event.result.output})
+        except Exception:
+            yield AgentStreamFrame(
+                "error",
+                {
+                    "code": "AGENT_INVOCATION_ERROR",
+                    "message": "Agent invocation failed",
+                },
+            )

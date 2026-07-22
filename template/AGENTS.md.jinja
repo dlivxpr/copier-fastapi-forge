@@ -66,6 +66,10 @@ This service follows a thin-route pattern:
 - **Routes** (`app/api/router.py`): HTTP concerns only — parse input, call service, return response.
 - **Core** (`app/core/`): Domain exceptions, configuration, pagination.
 - **Dependencies** (`app/api/deps.py`): FastAPI dependency injection for API key, configuration.
+[% if agent_capability == "pydantic-ai" %]- **Agent** (`app/agents/assistant.py`): Pydantic AI agent and caller-owned runtime dependencies.
+- **Agent service** (`app/services/agent.py`): Shared single-turn JSON/SSE invocation semantics.
+- **Model interface**: Configure only `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL`.
+[% endif %]
 
 All business routes are protected by a deployment-level API key. Health probes (`/health/live`, `/health/ready`) are public.
 

@@ -1,0 +1,46 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.models import Model
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
+
+from app.core.config import Settings
+
+
+@dataclass(frozen=True, slots=True)
+class AgentDependencies:
+    model_name: str
+
+
+AssistantAgent = Agent[AgentDependencies, str]
+
+
+def create_agent(model: Model) -> AssistantAgent:
+    agent = Agent(
+        model,
+        deps_type=AgentDependencies,
+        output_type=str,
+        name="service_agent",
+        instructions="Answer the caller's current input. Do not assume prior conversation history.",
+    )
+
+    @agent.tool
+    async def configured_model(ctx: RunContext[AgentDependencies]) -> str:
+        """Return the model name configured for this invocation."""
+        return ctx.deps.model_name
+
+    return agent
+
+
+def create_configured_agent(settings: Settings) -> AssistantAgent:
+    model = OpenAIChatModel(
+        settings.llm_model,
+        provider=OpenAIProvider(
+            base_url=str(settings.llm_base_url),
+            api_key=settings.llm_api_key.get_secret_value(),
+        ),
+    )
+    return create_agent(model)

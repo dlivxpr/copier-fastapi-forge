@@ -26,6 +26,9 @@ dependencies = [
     "sqlmodel>=0.0.24",
 [% endif %]
 [% endif %]
+[% if agent_capability == "pydantic-ai" %]
+    "pydantic-ai-slim[openai]>=2.0.0",
+[% endif %]
     "uvicorn[standard]>=0.34.0",
 ]
 

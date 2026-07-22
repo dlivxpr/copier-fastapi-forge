@@ -59,6 +59,14 @@ background_tasks:
     Taskiq: taskiq
   default: none
 
+agent_capability:
+  type: str
+  help: Single-turn agent capability
+  choices:
+    No agent: none
+    Pydantic AI: pydantic-ai
+  default: none
+
 enable_caching:
   type: bool
   help: Enable Redis-backed HTTP response caching

@@ -1,0 +1,276 @@
+from __future__ import annotations
+
+import asyncio
+import json
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from typing import Any, cast
+
+import pytest
+from httpx import AsyncClient
+from pydantic_ai import (
+    ModelMessage,
+    ModelResponse,
+    PartStartEvent,
+    TextPart,
+    ToolCallPart,
+    UserPromptPart,
+    models,
+)
+from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
+
+from app.agents.assistant import AgentDependencies, AssistantAgent, create_agent
+from app.api.deps import get_agent, get_agent_dependencies, get_agent_service
+from app.core.config import Settings
+from app.main import app
+from app.services.agent import AgentInvocationService
+
+pytestmark = pytest.mark.anyio
+models.ALLOW_MODEL_REQUESTS = False
+
+
+def install_model(model: FunctionModel) -> None:
+    service = AgentInvocationService(
+        create_agent(model),
+        AgentDependencies(model_name="test-model"),
+    )
+    app.dependency_overrides[get_agent_service] = lambda: service
+
+
+def text_response(
+    messages: list[ModelMessage],
+    info: AgentInfo,
+) -> ModelResponse:
+    del info
+    prompt = cast(UserPromptPart, messages[-1].parts[-1])
+    return ModelResponse(parts=[TextPart(f"reply:{prompt.content}")])
+
+
+def failing_response(
+    messages: list[ModelMessage],
+    info: AgentInfo,
+) -> ModelResponse:
+    del messages, info
+    raise RuntimeError("model unavailable")
+
+
+def tool_response(
+    messages: list[ModelMessage],
+    info: AgentInfo,
+) -> ModelResponse:
+    del info
+    if len(messages) == 1:
+        return ModelResponse(
+            parts=[
+                ToolCallPart(
+                    "configured_model",
+                    {},
+                    tool_call_id="model-call",
+                )
+            ]
+        )
+    return ModelResponse(parts=[TextPart("using test-model")])
+
+
+async def tool_stream(
+    messages: list[ModelMessage],
+    info: AgentInfo,
+) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
+    del info
+    if len(messages) == 1:
+        yield {
+            0: DeltaToolCall(
+                name="configured_model",
+                json_args="{}",
+                tool_call_id="model-call",
+            )
+        }
+    else:
+        yield "using "
+        yield "test-model"
+
+
+def test_production_dependencies_construct_compatible_model_service() -> None:
+    settings = Settings(
+        llm_base_url="https://gateway.example/v1",
+        llm_api_key="test-key",
+        llm_model="test-model",
+    )
+
+    agent = get_agent(settings)
+    dependencies = get_agent_dependencies(settings)
+    service = get_agent_service(agent, dependencies)
+
+    assert isinstance(service, AgentInvocationService)
+    assert dependencies == AgentDependencies(model_name="test-model")
+
+
+def parse_sse(body: str) -> list[tuple[str, dict[str, Any]]]:
+    frames = []
+    for block in body.replace("\r\n", "\n").strip().split("\n\n"):
+        fields = dict(line.split(": ", 1) for line in block.splitlines())
+        frames.append((fields["event"], json.loads(fields["data"])))
+    return frames
+
+
+async def test_json_operation_returns_validated_single_turn_output(
+    client: AsyncClient,
+    api_key_headers: dict[str, str],
+) -> None:
+    install_model(FunctionModel(text_response))
+
+    response = await client.post(
+        "/api/v1/agent/run",
+        headers=api_key_headers,
+        json={"input": "first request"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"output": "reply:first request"}
+
+
+@pytest.mark.parametrize("extra_field", ["conversation_id", "history", "messages"])
+async def test_json_operation_rejects_server_owned_conversation_inputs(
+    client: AsyncClient,
+    api_key_headers: dict[str, str],
+    extra_field: str,
+) -> None:
+    install_model(FunctionModel(text_response))
+
+    response = await client.post(
+        "/api/v1/agent/run",
+        headers=api_key_headers,
+        json={"input": "current input", extra_field: []},
+    )
+
+    assert response.status_code == 422
+
+
+async def test_concurrent_json_operations_do_not_share_input_state(
+    client: AsyncClient,
+    api_key_headers: dict[str, str],
+) -> None:
+    install_model(FunctionModel(text_response))
+
+    first, second = await asyncio.gather(
+        client.post(
+            "/api/v1/agent/run",
+            headers=api_key_headers,
+            json={"input": "alpha"},
+        ),
+        client.post(
+            "/api/v1/agent/run",
+            headers=api_key_headers,
+            json={"input": "beta"},
+        ),
+    )
+
+    assert first.json() == {"output": "reply:alpha"}
+    assert second.json() == {"output": "reply:beta"}
+
+
+async def test_sse_operation_frames_content_tools_and_completion(
+    client: AsyncClient,
+    api_key_headers: dict[str, str],
+) -> None:
+    install_model(FunctionModel(tool_response, stream_function=tool_stream))
+
+    response = await client.post(
+        "/api/v1/agent/stream",
+        headers=api_key_headers,
+        json={"input": "which model"},
+    )
+
+    assert response.status_code == 200
+    frames = parse_sse(response.text)
+    assert [event for event, _ in frames] == [
+        "tool_call",
+        "tool_result",
+        "content",
+        "content",
+        "complete",
+    ]
+    assert frames[0][1] == {
+        "tool_name": "configured_model",
+        "tool_call_id": "model-call",
+        "args": {},
+    }
+    assert frames[1][1] == {"tool_call_id": "model-call", "content": "test-model"}
+    assert frames[2][1] == {"delta": "using "}
+    assert frames[3][1] == {"delta": "test-model"}
+    assert frames[4][1] == {"output": "using test-model"}
+
+
+async def test_json_and_sse_failures_use_stable_framing(
+    client: AsyncClient,
+    api_key_headers: dict[str, str],
+) -> None:
+    install_model(FunctionModel(failing_response))
+
+    json_response = await client.post(
+        "/api/v1/agent/run",
+        headers=api_key_headers,
+        json={"input": "fail"},
+    )
+    sse_response = await client.post(
+        "/api/v1/agent/stream",
+        headers=api_key_headers,
+        json={"input": "fail"},
+    )
+
+    assert json_response.status_code == 502
+    assert json_response.json() == {
+        "error": {
+            "code": "AGENT_INVOCATION_ERROR",
+            "message": "Agent invocation failed",
+            "details": {},
+        }
+    }
+    assert parse_sse(sse_response.text) == [
+        (
+            "error",
+            {
+                "code": "AGENT_INVOCATION_ERROR",
+                "message": "Agent invocation failed",
+            },
+        )
+    ]
+
+
+class TrackingAgent:
+    def __init__(self) -> None:
+        self.closed = asyncio.Event()
+        self.release = asyncio.Event()
+
+    @asynccontextmanager
+    async def run_stream_events(
+        self,
+        current_input: str,
+        *,
+        deps: AgentDependencies,
+    ) -> AsyncIterator[AsyncIterator[PartStartEvent]]:
+        del current_input, deps
+
+        async def event_stream() -> AsyncIterator[PartStartEvent]:
+            yield PartStartEvent(index=0, part=TextPart("first"))
+            await self.release.wait()
+
+        try:
+            yield event_stream()
+        finally:
+            self.closed.set()
+
+
+async def test_closing_stream_releases_agent_event_context() -> None:
+    agent = TrackingAgent()
+    service = AgentInvocationService(
+        cast(AssistantAgent, agent),
+        AgentDependencies(model_name="test-model"),
+    )
+    stream = service.stream("disconnect")
+
+    frame = await anext(stream)
+    assert (frame.event, frame.data) == ("content", {"delta": "first"})
+    await stream.aclose()
+
+    assert agent.closed.is_set()

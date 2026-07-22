@@ -45,6 +45,7 @@ def test_copier_public_api_renders_default_root_service(tmp_path: Path) -> None:
         "app/api/resources.py",
         "app/api/cache.py",
         "app/api/rate_limit.py",
+        "app/api/agent.py",
         "app/repositories",
         "app/models",
         "app/agents",
@@ -55,6 +56,7 @@ def test_copier_public_api_renders_default_root_service(tmp_path: Path) -> None:
         "app/services",
         "tests/test_persistence.py",
         "tests/test_rate_limit.py",
+        "tests/test_agent.py",
         "compose.yaml",
         "deploy/postgres",
         "deploy/redis",
@@ -63,6 +65,7 @@ def test_copier_public_api_renders_default_root_service(tmp_path: Path) -> None:
     assert not [path for path in forbidden_paths if (project / path).exists()]
     assert "DATABASE_URL" not in (project / ".env.example").read_text(encoding="utf-8")
     assert "REDIS_URL" not in (project / ".env.example").read_text(encoding="utf-8")
+    assert "LLM_BASE_URL" not in (project / ".env.example").read_text(encoding="utf-8")
 
     raw_deps = project_metadata(project)["dependencies"]
     deps: list[str] = cast("list[str]", raw_deps)
@@ -72,6 +75,7 @@ def test_copier_public_api_renders_default_root_service(tmp_path: Path) -> None:
         "fastapi-cache2",
         "logfire",
         "pydantic-ai",
+        "pydantic-ai-slim",
         "redis",
         "sqlalchemy",
         "sqlmodel",
@@ -80,6 +84,31 @@ def test_copier_public_api_renders_default_root_service(tmp_path: Path) -> None:
     assert forbidden_dependencies.isdisjoint(
         dep.partition(">=")[0].partition("[")[0] for dep in deps
     )
+
+
+def test_pydantic_ai_renders_only_compatible_single_turn_capability(tmp_path: Path) -> None:
+    project = render_project(
+        tmp_path / "pydantic-ai-service",
+        data={"agent_capability": "pydantic-ai"},
+    )
+
+    expected_paths = [
+        "app/agents/assistant.py",
+        "app/api/agent.py",
+        "app/services/agent.py",
+        "tests/test_agent.py",
+    ]
+    assert not [path for path in expected_paths if not (project / path).is_file()]
+
+    raw_deps = project_metadata(project)["dependencies"]
+    deps: list[str] = cast("list[str]", raw_deps)
+    dependency_names = {dep.partition(">=")[0].partition("[")[0] for dep in deps}
+    assert "pydantic-ai-slim" in dependency_names
+
+    env_example = (project / ".env.example").read_text(encoding="utf-8")
+    assert "LLM_BASE_URL=" in env_example
+    assert "LLM_API_KEY=" in env_example
+    assert "LLM_MODEL=" in env_example
 
 
 @pytest.mark.parametrize(
@@ -127,6 +156,7 @@ def test_postgresql_renders_selected_orm_slice(
     "data",
     [
         {"background_tasks": "celery"},
+        {"agent_capability": "langchain"},
         {"rate_limiting": "memcached"},
         {"rate_limiting": "memory", "rate_limit_requests": 0},
         {"rate_limiting": "memory", "rate_limit_period_seconds": 0},
@@ -476,6 +506,7 @@ def test_taskiq_worker_executes_task_and_scheduler_starts(tmp_path: Path) -> Non
     ("data", "needs_redis"),
     [
         ({"background_tasks": "taskiq"}, True),
+        ({"agent_capability": "pydantic-ai"}, False),
         ({"enable_caching": True}, True),
         (
             {
@@ -504,7 +535,7 @@ def test_taskiq_worker_executes_task_and_scheduler_starts(tmp_path: Path) -> Non
             True,
         ),
     ],
-    ids=["taskiq", "cache", "memory-limiter", "redis-limiter", "combined"],
+    ids=["taskiq", "pydantic-ai", "cache", "memory-limiter", "redis-limiter", "combined"],
 )
 def test_representative_capability_project_quality(
     tmp_path: Path, data: dict[str, object], needs_redis: bool

@@ -25,6 +25,7 @@ async def domain_error_handler(request: Request, exc: Exception) -> JSONResponse
         "NOT_FOUND": 404,
 [% if database == "postgresql" %]        "CONFLICT": 409,
         "PERSISTENCE_ERROR": 500,
+[% endif %][% if agent_capability == "pydantic-ai" %]        "AGENT_INVOCATION_ERROR": 502,
 [% endif %]        "UNAUTHORIZED": 401,
 [% if rate_limiting != "none" %]        "RATE_LIMIT_EXCEEDED": 429,
 [% endif %]    }

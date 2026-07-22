@@ -1,0 +1,41 @@
+from __future__ import annotations
+
+from collections.abc import AsyncIterator
+from typing import Annotated
+
+from fastapi import APIRouter, Depends
+from fastapi.sse import EventSourceResponse, ServerSentEvent
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.api.deps import get_agent_service
+from app.services.agent import AgentInvocationService
+
+router = APIRouter(prefix="/agent", tags=["agent"])
+AgentServiceDep = Annotated[AgentInvocationService, Depends(get_agent_service)]
+
+
+class AgentInvocationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    input: Annotated[str, Field(min_length=1)]
+
+
+class AgentInvocationResponse(BaseModel):
+    output: str
+
+
+@router.post("/run")
+async def run_agent(
+    request: AgentInvocationRequest,
+    service: AgentServiceDep,
+) -> AgentInvocationResponse:
+    return AgentInvocationResponse(output=await service.run(request.input))
+
+
+@router.post("/stream", response_class=EventSourceResponse)
+async def stream_agent(
+    request: AgentInvocationRequest,
+    service: AgentServiceDep,
+) -> AsyncIterator[ServerSentEvent]:
+    async for frame in service.stream(request.input):
+        yield ServerSentEvent(event=frame.event, data=frame.data)

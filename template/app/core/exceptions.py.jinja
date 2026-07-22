@@ -40,6 +40,14 @@ class PersistenceError(DomainError):
         )
 
 
+[% endif %][% if agent_capability == "pydantic-ai" %]class AgentInvocationError(DomainError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="AGENT_INVOCATION_ERROR",
+            message="Agent invocation failed",
+        )
+
+
 [% endif %]class UnauthorizedError(DomainError):
     def __init__(self, message: str = "Unauthorized") -> None:
         super().__init__(code="UNAUTHORIZED", message=message)[% if rate_limiting != "none" %]

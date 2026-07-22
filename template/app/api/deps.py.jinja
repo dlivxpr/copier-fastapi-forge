@@ -7,12 +7,18 @@ from fastapi import Depends, Header
 [% if database == "postgresql" %][% if orm == "sqlalchemy" %]from sqlalchemy.ext.asyncio import AsyncSession
 [% else %]from sqlmodel.ext.asyncio.session import AsyncSession
 [% endif %][% endif %]
-from app.core.config import Settings
+[% if agent_capability == "pydantic-ai" %]from app.agents.assistant import (
+    AgentDependencies,
+    AssistantAgent,
+    create_configured_agent,
+)
+[% endif %]from app.core.config import Settings
 from app.core.exceptions import UnauthorizedError
 from app.core.pagination import PaginationParams
 [% if database == "postgresql" %]from app.db.session import database
 from app.repositories.resource import ResourceRepository
-from app.services.resource import ResourceService
+[% endif %][% if agent_capability == "pydantic-ai" %]from app.services.agent import AgentInvocationService
+[% endif %][% if database == "postgresql" %]from app.services.resource import ResourceService
 [% endif %]
 
 def _get_settings() -> Settings:
@@ -32,7 +38,28 @@ def _verify_api_key(
 
 
 RequireApiKey = Depends(_verify_api_key)
-[% if database == "postgresql" %]
+[% if agent_capability == "pydantic-ai" %]
+
+def get_agent(settings: SettingsDep) -> AssistantAgent:
+    return create_configured_agent(settings)
+
+
+AgentDep = Annotated[AssistantAgent, Depends(get_agent)]
+
+
+def get_agent_dependencies(settings: SettingsDep) -> AgentDependencies:
+    return AgentDependencies(model_name=settings.llm_model)
+
+
+AgentDependenciesDep = Annotated[AgentDependencies, Depends(get_agent_dependencies)]
+
+
+def get_agent_service(
+    agent: AgentDep,
+    dependencies: AgentDependenciesDep,
+) -> AgentInvocationService:
+    return AgentInvocationService(agent, dependencies)
+[% endif %][% if database == "postgresql" %]
 
 async def get_session() -> AsyncIterator[AsyncSession]:
     async with database.session() as session:
