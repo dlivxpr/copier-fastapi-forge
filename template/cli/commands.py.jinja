@@ -6,7 +6,8 @@
 import click
 import uvicorn
 [% if database == "postgresql" %]from alembic.config import Config
-[% endif %]from tabulate import tabulate
+[% endif %]from fastapi.routing import iter_route_contexts
+from tabulate import tabulate
 
 [% if database == "postgresql" %]from alembic import command
 [% endif %]from app.main import app
@@ -36,7 +37,7 @@ def server_run(host: str, port: int, reload: bool) -> None:
 def server_routes() -> None:
     """Show all registered routes."""
     routes: list[list[str]] = []
-    for route in app.routes:
+    for route in iter_route_contexts(app.routes):
         path = getattr(route, "path", None)
         if path is None:
             continue
