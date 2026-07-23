@@ -1,0 +1,56 @@
+# 命令参考
+
+所有命令从项目根目录执行。
+
+## 安装与质量
+
+```bash
+uv sync --all-groups
+uv run ruff check .
+uv run ruff format --check .
+uv run ty check
+uv run pytest
+```
+
+## 项目 CLI
+
+```bash
+uv run [[ project_slug ]] server run --host 0.0.0.0 --port [[ backend_port ]]
+uv run [[ project_slug ]] server run --reload
+uv run [[ project_slug ]] server routes
+```
+[% if database == "postgresql" %]
+
+## Database
+
+```bash
+uv run [[ project_slug ]] db init
+uv run [[ project_slug ]] db migrate --message "describe change"
+uv run [[ project_slug ]] db upgrade
+uv run [[ project_slug ]] db downgrade
+uv run [[ project_slug ]] db current
+uv run [[ project_slug ]] db history
+```
+[% endif %][% if background_tasks == "taskiq" %]
+
+## Taskiq
+
+```bash
+uv run [[ project_slug ]] taskiq worker
+uv run [[ project_slug ]] taskiq worker --workers 4
+uv run [[ project_slug ]] taskiq worker --reload
+uv run [[ project_slug ]] taskiq scheduler
+```
+[% endif %][% if enable_docker %]
+
+## Docker Compose
+
+```bash
+docker compose -f deploy/compose.yaml config
+docker compose -f deploy/compose.yaml up --build
+docker compose -f deploy/compose.dev.yaml up --build
+docker compose -f deploy/compose.prod.yaml up -d --build
+docker compose -f deploy/compose.prod.yaml logs -f app
+docker compose -f deploy/compose.prod.yaml down
+```
+[% endif %]

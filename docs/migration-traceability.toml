@@ -610,7 +610,342 @@ verification = ["test_agent_and_logfire_pass_real_chat_completions_contract"]
 profile = "agent_logfire"
 legacy_source = "legacy/template/{{cookiecutter.project_slug}}/AGENTS.md"
 target = "AGENTS.md"
-allowed_transformations = ["backend 移至根目录", "删除 V1 排除 guidance", "增加批准的单轮 transport contract"]
+allowed_transformations = ["backend 移至根目录", "删除 V1 排除 guidance", "增加批准的单轮 transport contract", "挂载 Issue #11 条件 deployment/CI guidance"]
 removed_references = ["frontend、用户/JWT、conversation、RAG 与替代 providers"]
-approved_deviation = ["记录 Agent JSON/SSE、LLM_* 与 content-safe Pydantic AI-only Logfire"]
+approved_deviation = ["记录 Agent JSON/SSE、LLM_* 与 content-safe Pydantic AI-only Logfire", "关闭 deployment/CI 时对应 guidance 不出现"]
 verification = ["test_agent_and_logfire_generation_boundaries_follow_legacy_defaults"]
+
+# Issue #11 deployment、CI、文档与 omp guidance profile。
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/Dockerfile"
+target = "deploy/Dockerfile"
+allowed_transformations = ["backend 移至项目根", "删除排除能力 runtime", "固定 Copier 路径与端口"]
+removed_references = ["文件处理目录与额外 parser runtime"]
+approved_deviation = ["healthcheck 使用 stdlib urllib", "uv image 固定为 0.8.4", "生成项目不含 uv.lock，因此不使用 --frozen 或 lockfile bind"]
+verification = ["test_docker_profiles_restore_legacy_runtime_contract_and_conditions"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/.dockerignore"
+target = "deploy/Dockerfile.dockerignore"
+allowed_transformations = ["适配 root build context", "删除 backend-relative 路径"]
+removed_references = ["删除能力目录与部署资产"]
+approved_deviation = ["使用 Dockerfile-specific ignore 文件名"]
+verification = ["test_docker_profiles_restore_legacy_runtime_contract_and_conditions"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/docker-compose.yml"
+target = "deploy/compose.yaml"
+allowed_transformations = ["backend 移至项目根", "只保留 app、PostgreSQL、Redis 与 Taskiq services", "Copier 能力条件化"]
+removed_references = ["删除能力 services、volumes、ports 与 commands"]
+approved_deviation = ["service 名保持 db", "CLI 启动 Taskiq process"]
+verification = ["test_docker_profiles_restore_legacy_runtime_contract_and_conditions"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/docker-compose.dev.yml"
+target = "deploy/compose.dev.yaml"
+allowed_transformations = ["backend 移至项目根", "只保留 retained services", "源码挂载路径适配"]
+removed_references = ["删除能力 services 与 development tooling"]
+approved_deviation = ["使用 compose.dev.yaml 命名", "应用与 worker 通过项目 CLI 启动"]
+verification = ["test_docker_profiles_restore_legacy_runtime_contract_and_conditions"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/docker-compose.prod.yml"
+target = "deploy/compose.prod.yaml"
+allowed_transformations = ["backend 移至项目根", "只保留 retained services", "删除外部 proxy service"]
+removed_references = ["删除能力 services、monitoring 与内置 proxy"]
+approved_deviation = ["Nginx 作为外部配置", "生成默认值确保 compose config 可独立解析", "production bundled Redis 支持可选 REDIS_PASSWORD"]
+verification = ["test_docker_profiles_restore_legacy_runtime_contract_and_conditions"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/nginx/nginx.conf"
+target = "deploy/nginx.conf"
+allowed_transformations = ["删除排除 upstream 与 routes", "backend root-layout 端口适配"]
+removed_references = ["frontend、WebSocket 与 Flower"]
+approved_deviation = ["upstream 使用 host.docker.internal 外部可达地址"]
+verification = ["test_external_nginx_and_github_workflow_keep_retained_contract"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/.github/workflows/ci.yml"
+target = ".github/workflows/ci.yml"
+allowed_transformations = ["backend 移至根目录", "删除排除 jobs", "基础设施与 Docker job 条件化"]
+removed_references = ["frontend、security scan、pip-audit、Trivy 与 import-only smoke"]
+approved_deviation = ["setup-uv 升级为 v6", "保留非阻断 Codecov", "coverage XML 仅报告、不设覆盖率门槛"]
+verification = ["test_external_nginx_and_github_workflow_keep_retained_contract"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/README.md"
+target = "README.md"
+allowed_transformations = ["正文迁移为简体中文", "backend 移至根目录", "只保留 retained capability 章节"]
+removed_references = ["删除产品能力、服务、命令与路径"]
+approved_deviation = ["使用 uv 与三套 deploy/compose*.yaml 作为公开开发接口"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/ENV_VARS.md"
+target = "ENV_VARS.md"
+allowed_transformations = ["正文迁移为简体中文", "仅保留生成 Settings 变量", "关闭能力条件化"]
+removed_references = ["删除能力环境变量"]
+approved_deviation = ["LLM_* 使用批准的单一模型接口"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/SECURITY.md"
+target = "SECURITY.md"
+allowed_transformations = ["正文迁移为简体中文", "删除身份与排除能力安全模型", "保留 deployment API Key 与 TLS"]
+removed_references = ["删除能力 hardening 与 known limitations"]
+approved_deviation = ["安全边界改为 deployment API Key"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/CONTRIBUTING.md"
+target = "CONTRIBUTING.md"
+allowed_transformations = ["正文迁移为简体中文", "backend 移至根目录", "删除排除工具链"]
+removed_references = ["frontend 与 pre-commit 专属步骤"]
+approved_deviation = ["使用 Ruff 100 字符与 ty"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/MANUAL_STEPS.md"
+target = "MANUAL_STEPS.md"
+allowed_transformations = ["正文迁移为简体中文", "只保留 selected external services", "关闭能力条件化"]
+removed_references = ["删除能力账号、secret 与部署步骤"]
+approved_deviation = ["健康 contract 使用根级 probes"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/docs/adding_features.md"
+target = "docs/adding_features.md"
+allowed_transformations = ["正文迁移为简体中文", "路径适配", "仅保留 retained extension seams"]
+removed_references = ["删除能力示例与替代 Agent 实现"]
+approved_deviation = ["示例收敛为当前公开分层"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/docs/architecture.md"
+target = "docs/architecture.md"
+allowed_transformations = ["正文迁移为简体中文", "backend 移至根目录", "删除排除层级"]
+removed_references = ["身份、文件、conversation 与其他删除能力架构"]
+approved_deviation = ["记录 deployment API Key 与无状态 Agent 边界"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/docs/commands.md"
+target = "docs/commands.md"
+allowed_transformations = ["正文迁移为简体中文", "删除 Make interface", "仅保留真实 CLI 与 compose 命令"]
+removed_references = ["删除能力与替代队列命令"]
+approved_deviation = ["命令从项目根执行"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/docs/configuration.md"
+target = "docs/configuration.md"
+allowed_transformations = ["正文迁移为简体中文", "仅保留生成 Settings", "变量名适配"]
+removed_references = ["身份、provider 与删除能力配置"]
+approved_deviation = ["LLM_* 单一模型接口与 deployment API Key"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/docs/patterns.md"
+target = "docs/patterns.md"
+allowed_transformations = ["正文迁移为简体中文", "删除排除 patterns", "保留 DI/service/repository/schema"]
+removed_references = ["frontend、connector 与身份资源示例"]
+approved_deviation = ["示例使用无身份 Widget"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/docs/testing.md"
+target = "docs/testing.md"
+allowed_transformations = ["正文迁移为简体中文", "根目录命令适配", "按 selected capability 条件化"]
+removed_references = ["删除能力测试说明"]
+approved_deviation = ["明确真实基础设施与公开 seam"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/docs/deploy.md"
+target = "docs/deploy.md"
+allowed_transformations = ["正文迁移为简体中文", "删除排除平台与资产", "root-layout Docker 路径适配"]
+removed_references = ["frontend、Kubernetes 与平台专属步骤"]
+approved_deviation = ["仅文档化三套 compose 与外部 Nginx"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/AGENTS.md"
+target = "AGENTS.md"
+allowed_transformations = ["backend 移至根目录", "删除排除 guidance", "增加 selected deployment/CI 路径"]
+removed_references = ["删除能力 agent context"]
+approved_deviation = ["保留单一根级共享 context"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/.claude/rules/api-conventions.md"
+target = ".omp/rules/api-conventions.md"
+allowed_transformations = ["转换为 omp rule", "正文迁移为简体中文", "globs 路径适配"]
+removed_references = ["身份与删除 routes 约定"]
+approved_deviation = ["使用 omp description/globs frontmatter"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/.claude/rules/architecture.md"
+target = ".omp/rules/architecture.md"
+allowed_transformations = ["转换为 omp rule", "正文迁移为简体中文", "删除排除层级"]
+removed_references = ["删除能力 architecture guidance"]
+approved_deviation = ["记录 retained resource ownership"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/.claude/rules/code-style.md"
+target = ".omp/rules/code-style.md"
+allowed_transformations = ["转换为 omp rule", "正文迁移为简体中文", "工具与路径适配"]
+removed_references = ["删除技术栈 style"]
+approved_deviation = ["使用 Ruff、ty 与 100 字符"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/.claude/rules/exceptions-security.md"
+target = ".omp/rules/exceptions-security.md"
+allowed_transformations = ["转换为 omp rule", "正文迁移为简体中文", "删除身份异常"]
+removed_references = ["身份、authorization 与删除能力异常"]
+approved_deviation = ["deployment API Key 与统一 envelope"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/.claude/rules/schemas-models.md"
+target = ".omp/rules/schemas-models.md"
+allowed_transformations = ["转换为 omp rule", "正文迁移为简体中文", "删除排除 model guidance"]
+removed_references = ["身份与删除资源 schema"]
+approved_deviation = ["保留 Create/Update/Response contract"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/.claude/rules/testing.md"
+target = ".omp/rules/testing.md"
+allowed_transformations = ["转换为 omp rule", "正文迁移为简体中文", "测试 seam 适配"]
+removed_references = ["删除能力测试 guidance"]
+approved_deviation = ["强调真实 service 与公开 seam"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/.claude/skills/pytest-suite/SKILL.md"
+target = ".omp/skills/pytest-suite/SKILL.md"
+allowed_transformations = ["转换为 omp skill", "正文迁移为简体中文", "命令路径适配"]
+removed_references = ["删除能力 fixture guidance"]
+approved_deviation = ["显式 name/description frontmatter"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/.claude/skills/alembic-migration/SKILL.md"
+target = ".omp/skills/alembic-migration/SKILL.md"
+allowed_transformations = ["转换为条件 omp skill", "正文迁移为简体中文", "CLI 路径适配"]
+removed_references = ["删除 models 与 seed 流程"]
+approved_deviation = ["仅 PostgreSQL 时生成"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/.claude/skills/background-task/SKILL.md"
+target = ".omp/skills/background-task/SKILL.md"
+allowed_transformations = ["转换为条件 omp skill", "正文迁移为简体中文", "仅保留 Taskiq"]
+removed_references = ["替代 queues 与示例 task"]
+approved_deviation = ["仅 Taskiq 时生成"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/.claude/skills/agent-tool/SKILL.md"
+target = ".omp/skills/agent-tool/SKILL.md"
+allowed_transformations = ["转换为条件 omp skill", "正文迁移为简体中文", "仅保留无状态 Pydantic AI"]
+removed_references = ["provider 分支、history 与排除 tools"]
+approved_deviation = ["仅 Pydantic AI 时生成"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/.claude/commands/add-endpoint.md"
+target = ".omp/commands/add-endpoint.md"
+allowed_transformations = ["转换为 omp command", "正文迁移为简体中文", "参数 placeholder 适配"]
+removed_references = ["身份与删除能力 endpoint guidance"]
+approved_deviation = ["使用当前 omp 支持的 $ARGUMENTS；不保留未消费 metadata"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/.claude/commands/fix-issue.md"
+target = ".omp/commands/fix-issue.md"
+allowed_transformations = ["转换为 omp command", "正文迁移为简体中文", "移除 permission allowlist"]
+removed_references = ["Claude-specific invocation 与 permissions"]
+approved_deviation = ["使用当前 omp 支持的 $ARGUMENTS；不保留未消费 metadata"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/.claude/commands/review.md"
+target = ".omp/commands/review.md"
+allowed_transformations = ["转换为 omp command", "正文迁移为简体中文", "审查标准适配"]
+removed_references = ["Claude-specific invocation 与 permissions"]
+approved_deviation = ["使用当前 omp 支持的 $ARGUMENTS；不保留未消费 metadata"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/docs/howto/add-api-endpoint.md"
+target = "docs/howto/add-api-endpoint.md"
+allowed_transformations = ["正文迁移为简体中文", "route 与 dependency 适配 root layout", "按数据库能力条件化"]
+removed_references = ["Notification 示例、用户/JWT、email channel、list endpoint 与 Makefile 命令"]
+approved_deviation = ["改为 retained capability 的 contract-first 操作步骤"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/docs/howto/add-agent-tool.md"
+target = "docs/howto/add-agent-tool.md"
+allowed_transformations = ["正文迁移为简体中文", "只保留 Pydantic AI tool contract", "改用 RunContext dependency"]
+removed_references = ["替代 agent framework、email 与外部 weather 示例"]
+approved_deviation = ["按无状态单轮 Agent contract 验证 JSON 与 SSE"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/docs/howto/add-background-task.md"
+target = "docs/howto/add-background-task.md"
+allowed_transformations = ["正文迁移为简体中文", "只保留 Taskiq", "命令适配项目 CLI"]
+removed_references = ["Celery、ARQ、Prefect、Flower、通知渠道与 Makefile 命令"]
+approved_deviation = ["使用当前 broker 与 scheduler process contract"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+[[target]]
+profile = "delivery"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/docs/howto/customize-agent-prompt.md"
+target = "docs/howto/customize-agent-prompt.md"
+allowed_transformations = ["正文迁移为简体中文", "只保留无状态 Pydantic AI prompt contract"]
+removed_references = ["RAG、persona、用户支持与 AI_TEMPERATURE"]
+approved_deviation = ["增加 credential boundary 与 content-safe Logfire 指引"]
+verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]

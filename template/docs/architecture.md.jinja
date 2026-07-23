@@ -1,0 +1,53 @@
+# 架构
+
+## 请求流
+
+最小配置使用：
+
+```text
+HTTP request → FastAPI route → service → response
+```
+[% if database == "postgresql" %]
+数据库能力启用后使用：
+
+```text
+HTTP request → FastAPI route → service → repository → async database
+```
+[% endif %]
+
+## 目录职责
+
+| 路径 | 职责 |
+|---|---|
+| `app/main.py` | application factory 与 async lifespan |
+| `app/api/` | HTTP contract、dependency 与 exception handler |
+| `app/core/` | Settings、错误、日志、middleware 与可选 runtime integration |
+| `app/services/` | 业务规则与 orchestration |
+| `app/schemas/` | Pydantic request/response contract |
+| `cli/commands.py` | 项目 CLI |
+| `tests/` | 公开行为验收 |
+[% if database == "postgresql" %]| `app/repositories/` | 仅数据访问 |
+| `app/db/` | model、engine、session 与 transaction ownership |
+| `alembic/` | schema migration |
+[% endif %][% if ai_framework == "pydantic_ai" %]| `app/agents/` | 无请求间可变状态的 Agent 定义 |
+[% endif %][% if background_tasks == "taskiq" %]| `app/worker/` | Taskiq broker、result backend 与 scheduler |
+[% endif %]
+
+## 层级规则
+
+- route 保持薄，只处理 HTTP 输入、dependency 和 response。
+- service 承载业务规则，并抛出 domain exception。
+[% if database == "postgresql" %]- repository 不包含业务规则，不调用 `commit()`；写入使用 `flush()`/`refresh()`。
+- API session manager 拥有 transaction；worker 通过独立 context 获得 engine/session。
+[% endif %]- exception handler 统一输出 error envelope。
+- lifecycle resource 必须在显式 owner 中初始化和关闭。
+
+## 运行边界
+
+- `/health`、`/health/live`、`/health/ready` 公开。
+- 业务 API 由 deployment API Key dependency 统一保护。
+- Request ID 使用 `X-Request-ID` 贯穿 response 与日志。
+[% if enable_redis %]- Redis connection 由 API lifespan 持有。
+[% endif %][% if background_tasks == "taskiq" %]- Taskiq process 自己初始化 broker，不复用 API Redis client lifecycle。
+[% endif %][% if ai_framework == "pydantic_ai" %]- Agent dependency 由调用方构造；请求之间不共享可变推理状态。
+[% endif %]

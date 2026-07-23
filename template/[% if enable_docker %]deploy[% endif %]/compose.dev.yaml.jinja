@@ -3,9 +3,12 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    image: [[ project_slug ]]_backend:latest
+    image: [[ project_slug ]]_backend:dev
+    command: ["python", "-m", "cli.commands", "server", "run", "--host", "0.0.0.0", "--port", "[[ backend_port ]]", "--reload"]
     environment:
       API_KEY: "${API_KEY:-[[ deployment_api_key ]]}"
+      DEBUG: "true"
+      ENVIRONMENT: local
 [% if database == "postgresql" %]      POSTGRES_HOST: db
       POSTGRES_PORT: "5432"
       POSTGRES_USER: "${POSTGRES_USER:-postgres}"
@@ -22,6 +25,9 @@ services:
       LOGFIRE_SEND_TO_LOGFIRE: "${LOGFIRE_SEND_TO_LOGFIRE:-false}"
 [% endif %]    ports:
       - "[[ backend_port ]]:[[ backend_port ]]"
+    volumes:
+      - ../app:/app/app:ro
+      - ../cli:/app/cli:ro
 [% if database == "postgresql" or enable_redis or background_tasks == "taskiq" %]    depends_on:
 [% if database == "postgresql" %]      db:
         condition: service_healthy
@@ -69,8 +75,8 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    image: [[ project_slug ]]_backend:latest
-    command: ["python", "-m", "cli.commands", "taskiq", "worker"]
+    image: [[ project_slug ]]_backend:dev
+    command: ["python", "-m", "cli.commands", "taskiq", "worker", "--reload"]
     environment:
       TASKIQ_BROKER_URL: redis://redis:6379/1
       TASKIQ_RESULT_BACKEND_URL: redis://redis:6379/1
@@ -81,7 +87,10 @@ services:
       POSTGRES_DB: "${POSTGRES_DB:-[[ project_slug ]]}"
 [% endif %][% if enable_redis %]      REDIS_HOST: redis
       REDIS_PORT: "6379"
-[% endif %]    depends_on:
+[% endif %]    volumes:
+      - ../app:/app/app:ro
+      - ../cli:/app/cli:ro
+    depends_on:
       redis:
         condition: service_healthy
 [% if database == "postgresql" %]      db:
@@ -94,7 +103,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    image: [[ project_slug ]]_backend:latest
+    image: [[ project_slug ]]_backend:dev
     command: ["python", "-m", "cli.commands", "taskiq", "scheduler"]
     environment:
       TASKIQ_BROKER_URL: redis://redis:6379/1
@@ -106,7 +115,10 @@ services:
       POSTGRES_DB: "${POSTGRES_DB:-[[ project_slug ]]}"
 [% endif %][% if enable_redis %]      REDIS_HOST: redis
       REDIS_PORT: "6379"
-[% endif %]    depends_on:
+[% endif %]    volumes:
+      - ../app:/app/app:ro
+      - ../cli:/app/cli:ro
+    depends_on:
       redis:
         condition: service_healthy
 [% if database == "postgresql" %]      db:

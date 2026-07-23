@@ -3,9 +3,11 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    image: [[ project_slug ]]_backend:latest
+    image: [[ project_slug ]]_backend:prod
     environment:
       API_KEY: "${API_KEY:-[[ deployment_api_key ]]}"
+      DEBUG: "false"
+      ENVIRONMENT: production
 [% if database == "postgresql" %]      POSTGRES_HOST: db
       POSTGRES_PORT: "5432"
       POSTGRES_USER: "${POSTGRES_USER:-postgres}"
@@ -13,13 +15,13 @@ services:
       POSTGRES_DB: "${POSTGRES_DB:-[[ project_slug ]]}"
 [% endif %][% if enable_redis %]      REDIS_HOST: redis
       REDIS_PORT: "6379"
-[% endif %][% if background_tasks == "taskiq" %]      TASKIQ_BROKER_URL: redis://redis:6379/1
-      TASKIQ_RESULT_BACKEND_URL: redis://redis:6379/1
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
+[% endif %][% if background_tasks == "taskiq" %]      TASKIQ_BROKER_URL: "redis://:${REDIS_PASSWORD:-}@redis:6379/1"
+      TASKIQ_RESULT_BACKEND_URL: "redis://:${REDIS_PASSWORD:-}@redis:6379/1"
 [% endif %][% if ai_framework == "pydantic_ai" %]      LLM_BASE_URL: "${LLM_BASE_URL:-https://api.example.com/v1}"
       LLM_API_KEY: "${LLM_API_KEY:-model-key-CHANGEME}"
       LLM_MODEL: "${LLM_MODEL:-model-name-CHANGEME}"
 [% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]      LOGFIRE_TOKEN: "${LOGFIRE_TOKEN:-}"
-      LOGFIRE_SEND_TO_LOGFIRE: "${LOGFIRE_SEND_TO_LOGFIRE:-false}"
 [% endif %]    ports:
       - "[[ backend_port ]]:[[ backend_port ]]"
 [% if database == "postgresql" or enable_redis or background_tasks == "taskiq" %]    depends_on:
@@ -29,7 +31,7 @@ services:
         condition: service_healthy
 [% endif %][% endif %]    networks:
       - backend
-    restart: unless-stopped
+    restart: always
 [% if database == "postgresql" %]
   db:
     image: postgres:16-alpine
@@ -37,8 +39,6 @@ services:
       POSTGRES_DB: "${POSTGRES_DB:-[[ project_slug ]]}"
       POSTGRES_USER: "${POSTGRES_USER:-postgres}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -48,32 +48,41 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
+    restart: always
 [% endif %][% if enable_redis or background_tasks == "taskiq" %]
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    command:
+      - sh
+      - -c
+      - >-
+        if [ -n "$$REDIS_PASSWORD" ]; then
+          exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD";
+        else
+          exec redis-server --appendonly yes;
+        fi
+    environment:
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
     volumes:
       - redis_data:/data
     networks:
       - backend
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" ping; else redis-cli ping; fi"]
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
+    restart: always
 [% endif %][% if background_tasks == "taskiq" %]
   worker:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    image: [[ project_slug ]]_backend:latest
+    image: [[ project_slug ]]_backend:prod
     command: ["python", "-m", "cli.commands", "taskiq", "worker"]
     environment:
-      TASKIQ_BROKER_URL: redis://redis:6379/1
-      TASKIQ_RESULT_BACKEND_URL: redis://redis:6379/1
+      TASKIQ_BROKER_URL: "redis://:${REDIS_PASSWORD:-}@redis:6379/1"
+      TASKIQ_RESULT_BACKEND_URL: "redis://:${REDIS_PASSWORD:-}@redis:6379/1"
 [% if database == "postgresql" %]      POSTGRES_HOST: db
       POSTGRES_PORT: "5432"
       POSTGRES_USER: "${POSTGRES_USER:-postgres}"
@@ -81,6 +90,7 @@ services:
       POSTGRES_DB: "${POSTGRES_DB:-[[ project_slug ]]}"
 [% endif %][% if enable_redis %]      REDIS_HOST: redis
       REDIS_PORT: "6379"
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
 [% endif %]    depends_on:
       redis:
         condition: service_healthy
@@ -88,17 +98,17 @@ services:
         condition: service_healthy
 [% endif %]    networks:
       - backend
-    restart: unless-stopped
+    restart: always
 
   scheduler:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    image: [[ project_slug ]]_backend:latest
+    image: [[ project_slug ]]_backend:prod
     command: ["python", "-m", "cli.commands", "taskiq", "scheduler"]
     environment:
-      TASKIQ_BROKER_URL: redis://redis:6379/1
-      TASKIQ_RESULT_BACKEND_URL: redis://redis:6379/1
+      TASKIQ_BROKER_URL: "redis://:${REDIS_PASSWORD:-}@redis:6379/1"
+      TASKIQ_RESULT_BACKEND_URL: "redis://:${REDIS_PASSWORD:-}@redis:6379/1"
 [% if database == "postgresql" %]      POSTGRES_HOST: db
       POSTGRES_PORT: "5432"
       POSTGRES_USER: "${POSTGRES_USER:-postgres}"
@@ -106,6 +116,7 @@ services:
       POSTGRES_DB: "${POSTGRES_DB:-[[ project_slug ]]}"
 [% endif %][% if enable_redis %]      REDIS_HOST: redis
       REDIS_PORT: "6379"
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
 [% endif %]    depends_on:
       redis:
         condition: service_healthy
@@ -113,7 +124,7 @@ services:
         condition: service_healthy
 [% endif %]    networks:
       - backend
-    restart: unless-stopped
+    restart: always
 [% endif %]
 networks:
   backend:

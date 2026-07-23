@@ -104,10 +104,23 @@ def test_issue_9_generation_boundaries(tmp_path: Path) -> None:
     assert not (taskiq / "tests" / "test_tasks.py").exists()
     compose = (taskiq / "deploy" / "compose.yaml").read_text(encoding="utf-8")
     workflow = (taskiq / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    assert "app.worker.taskiq_app:broker" in compose
-    assert "app.worker.taskiq_app:scheduler" in compose
+    compose_config = yaml.safe_load(compose)
+    assert compose_config["services"]["worker"]["command"] == [
+        "python",
+        "-m",
+        "cli.commands",
+        "taskiq",
+        "worker",
+    ]
+    assert compose_config["services"]["scheduler"]["command"] == [
+        "python",
+        "-m",
+        "cli.commands",
+        "taskiq",
+        "scheduler",
+    ]
     assert "TASKIQ_RESULT_BACKEND_URL: redis://redis:6379/1" in compose
-    assert "image: redis:8-alpine" in workflow
+    assert "image: redis:7-alpine" in workflow
 
 
 def test_memory_rate_limit_uses_no_redis(tmp_path: Path) -> None:

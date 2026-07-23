@@ -1,0 +1,13 @@
+---
+name: agent-tool
+description: 为无状态 Pydantic AI Agent 添加或修改 tool 时使用。
+---
+
+# Agent tool
+
+1. 定义具体输入、输出、失败条件和 side effect。
+2. tool 使用 `RunContext[Deps]` 获取当前请求 dependency。
+3. 请求级数据只存在于当前 `Deps`；不要写入 module 或共享 Agent instance。
+4. docstring 明确说明用途，避免让模型猜测参数语义。
+5. 使用本地 Chat Completions-compatible server 验证真实 model adapter 与 tool call/result frame。
+6. 同时验证 JSON 与 SSE transport，并确认后续请求没有继承历史。

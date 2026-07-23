@@ -1,0 +1,46 @@
+# 添加功能
+
+## 添加 API endpoint
+
+1. 在 `app/schemas/` 定义 request/response contract。
+[% if database == "postgresql" %]2. 在 `app/db/models/` 定义 model，并创建 Alembic migration。
+3. 在 `app/repositories/` 实现数据访问；只使用 `flush()`/`refresh()`。
+4. 在 `app/services/` 实现业务规则。
+5. 在 `app/api/deps.py` 注册 service dependency。
+6. 在 `app/api/` 添加薄 route，并挂载 deployment API Key dependency。
+7. 在 `app/api/router.py` 注册 router。
+8. 通过 HTTP seam 添加行为测试。
+[% else %]2. 在 `app/services/` 实现业务规则。
+3. 在 `app/api/deps.py` 注册 dependency。
+4. 在 `app/api/` 添加薄 route，并挂载 deployment API Key dependency。
+5. 在 `app/api/router.py` 注册 router。
+6. 通过 HTTP seam 添加行为测试。
+[% endif %]
+
+route 不直接包含数据访问或跨资源 orchestration。domain failure 使用 `AppException` 子类，由统一 handler 转换为 error envelope。
+
+## 添加 CLI command
+
+在 `cli/commands.py` 的现有 Click group 中添加 command，保持参数可脚本化，并用 `CliRunner` 验证 exit code 与输出。长时间运行的 process 应把具体 runtime 交给库入口，CLI 只负责参数和 process 启动。
+[% if database == "postgresql" %]
+
+## 添加 migration
+
+```bash
+uv run [[ project_slug ]] db migrate --message "describe change"
+uv run [[ project_slug ]] db upgrade
+uv run [[ project_slug ]] db current
+```
+
+检查 autogenerate 结果，不要盲目提交 migration。
+[% endif %][% if background_tasks == "taskiq" %]
+
+## 添加 Taskiq task
+
+在业务所属模块使用 `broker.task` 定义 task；不要把示例 task 放进共享 worker bootstrap。通过 `uv run [[ project_slug ]] taskiq worker` 和 scheduler 运行真实 process。
+[% endif %][% if ai_framework == "pydantic_ai" %]
+
+## 添加 Agent tool
+
+tool 接收 `RunContext[Deps]`，dependency 由当前请求构造。docstring 明确输入、输出和失败条件；不要在 Agent instance 保存请求级状态。
+[% endif %]

@@ -1,0 +1,15 @@
+---
+description: Pydantic schema 与 database model 边界
+globs:
+  - app/schemas/**/*.py
+  - app/db/models/**/*.py
+---
+
+# Schemas and models
+
+- API input/output 使用显式 Pydantic schema，不直接暴露 database model。
+- create、update 与 response contract 分离；PATCH update 字段按 contract 可选。
+- response schema 需要 ORM 转换时使用 `ConfigDict(from_attributes=True)`。
+- validator 只表达稳定 domain invariant，不执行 I/O。
+- database-generated identifier 与 timestamp 在 response 中保持明确类型。
+- schema 变化同步检查 OpenAPI、测试、migration 和文档。

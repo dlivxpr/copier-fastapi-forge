@@ -1,0 +1,95 @@
+# 环境变量
+
+`app/core/config.py` 是运行时配置的事实来源；`.env.example` 提供当前能力组合的完整变量清单。复制为 `.env` 后再写入本地值，不要提交 `.env`。
+
+## 项目与凭据
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `PROJECT_NAME` | `[[ project_name ]]` | OpenAPI 与日志中的项目名 |
+| `ENVIRONMENT` | `local` | 运行环境名称 |
+| `TIMEZONE` | `[[ timezone ]]` | IANA 时区 |
+| `API_KEY` | 生成时设置 | 业务 API 的 deployment key；生产必须轮换 |
+| `API_KEY_HEADER` | `X-API-Key` | 请求头名称 |
+[% if database == "postgresql" %]
+
+## PostgreSQL
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `POSTGRES_HOST` | `localhost` | 数据库主机 |
+| `POSTGRES_PORT` | `5432` | 数据库端口 |
+| `POSTGRES_USER` | `postgres` | 数据库账号 |
+| `POSTGRES_PASSWORD` | 空 | 数据库密码 |
+| `POSTGRES_DB` | `[[ project_slug ]]` | 数据库名称 |
+| `DB_POOL_SIZE` | `[[ db_pool_size ]]` | async engine pool size |
+| `DB_MAX_OVERFLOW` | `[[ db_max_overflow ]]` | pool overflow 上限 |
+| `DB_POOL_TIMEOUT` | `[[ db_pool_timeout ]]` | 获取 connection 的超时秒数 |
+
+应用根据上述字段构造 `DATABASE_URL`；compose 内部使用 service 名 `db`。
+[% endif %][% if enable_redis %]
+
+## Redis
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `REDIS_HOST` | `localhost` | Redis 主机 |
+| `REDIS_PORT` | `6379` | Redis 端口 |
+| `REDIS_PASSWORD` | 空 | Redis 密码 |
+| `REDIS_DB` | `0` | API Redis database |
+[% endif %][% if background_tasks == "taskiq" %]
+
+## Taskiq
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `TASKIQ_BROKER_URL` | `redis://localhost:6379/1` | broker URL |
+| `TASKIQ_RESULT_BACKEND_URL` | `redis://localhost:6379/1` | result backend URL |
+
+Taskiq URL 独立于 API Redis lifecycle。
+[% endif %][% if enable_rate_limiting %]
+
+## Rate limiting
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `RATE_LIMIT_REQUESTS` | `[[ rate_limit_requests ]]` | period 内请求上限 |
+| `RATE_LIMIT_PERIOD` | `[[ rate_limit_period ]]` | period 秒数 |
+| `RATE_LIMIT_STORAGE` | `[[ rate_limit_storage ]]` | `memory` 或 `redis` |
+[% endif %][% if ai_framework == "pydantic_ai" %]
+
+## Pydantic AI
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `LLM_BASE_URL` | `https://api.example.com/v1` | OpenAI Chat Completions-compatible base URL |
+| `LLM_API_KEY` | placeholder | 模型 endpoint key |
+| `LLM_MODEL` | placeholder | 模型标识 |
+[% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]
+
+## Logfire
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `LOGFIRE_TOKEN` | 空 | 发送 telemetry 时使用的 token |
+| `LOGFIRE_SERVICE_NAME` | `[[ project_slug ]]` | service name |
+| `LOGFIRE_ENVIRONMENT` | `development` | environment label |
+[% endif %][% if enable_cors %]
+
+## CORS
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `CORS_ORIGINS` | localhost origins | JSON origin 列表 |
+| `CORS_ALLOW_CREDENTIALS` | `true` | 是否允许 credentials |
+| `CORS_ALLOW_METHODS` | `["*"]` | JSON method 列表 |
+| `CORS_ALLOW_HEADERS` | `["*"]` | JSON header 列表 |
+[% endif %]
+
+## 验证
+
+```bash
+uv run python -c "from app.core.config import settings; print(settings.model_dump_json(indent=2))"
+```
+
+输出可能包含敏感字段；只在受控的本地终端执行，不要粘贴到 issue 或 CI 日志。

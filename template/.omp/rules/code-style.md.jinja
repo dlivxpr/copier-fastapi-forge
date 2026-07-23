@@ -1,0 +1,14 @@
+---
+description: Python 格式、类型与 async 编码约定
+globs:
+  - "**/*.py"
+---
+
+# Code style
+
+- 使用 Python [[ python_version ]]、4 空格、双引号和 100 字符行宽。
+- 导入使用项目根 package 的绝对路径；Ruff 负责排序。
+- 类型使用现代 syntax，公开函数和 dependency boundary 必须完整标注。
+- I/O、database、HTTP 与 lifecycle 路径使用 async；不要在 event loop 中执行 blocking I/O。
+- 不添加只使用一次的 abstraction，也不保留兼容 alias 或 dead branch。
+- 修改后运行 `uv run ruff check .`、`uv run ruff format --check .` 和 `uv run ty check`。

@@ -1,0 +1,26 @@
+# How-to：添加 Pydantic AI tool
+
+Tool 应聚焦单一动作，明确输入、输出、失败条件和 side effect。请求级 dependency 只通过 `RunContext[Deps]` 传递。
+
+## 1. 扩展 dependency
+
+在 `app/agents/assistant.py` 的 `Deps` dataclass 添加 tool 所需的显式 dependency。由 API service 为每次请求构造 `Deps`；不要把请求数据存入 module 或共享 `AssistantAgent` instance。
+
+## 2. 注册 tool
+
+在 `AssistantAgent._register_tools()` 中注册：
+
+```python
+from pydantic_ai import RunContext
+
+@agent.tool
+async def lookup_status(ctx: RunContext[Deps], resource_id: str) -> str:
+    """Return the current status for one resource."""
+    return await ctx.deps.status_service.lookup(resource_id)
+```
+
+Tool docstring 应说明模型何时调用、参数语义和返回内容。I/O 保持 async；不要吞掉真实错误或返回伪造结果。
+
+## 3. 验证
+
+通过本地 Chat Completions-compatible server 验证真实 tool call/result frame，同时覆盖 JSON 与 SSE transport。确认后续请求不会继承前一次请求的 `Deps` 或 tool state。

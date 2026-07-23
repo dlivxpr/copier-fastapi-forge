@@ -1,0 +1,63 @@
+# [[ project_name ]] 手工配置步骤
+
+生成器已经创建代码；以下步骤涉及外部资源、凭据或部署环境，必须由项目维护者完成。
+
+## 本地 secret
+
+```bash
+cp .env.example .env
+```
+
+- [ ] 将 `API_KEY` 替换为随机高熵值。
+- [ ] 确认 `.env` 被 Git 忽略。
+[% if database == "postgresql" %]
+
+## PostgreSQL
+
+- [ ] 准备 PostgreSQL 17 instance。
+[% if enable_docker %]- [ ] 本地可执行 `docker compose -f deploy/compose.dev.yaml up -d db`。
+[% endif %]- [ ] 在 `.env` 填写 `POSTGRES_HOST`、`POSTGRES_PORT`、`POSTGRES_USER`、`POSTGRES_PASSWORD` 和 `POSTGRES_DB`。
+- [ ] 执行 `uv run [[ project_slug ]] db upgrade`。
+- [ ] 执行 `uv run [[ project_slug ]] db current` 确认 revision。
+[% endif %][% if enable_redis or background_tasks == "taskiq" %]
+
+## Redis
+
+- [ ] 准备 Redis 8 instance，并限制公网访问。
+[% if enable_docker %]- [ ] 本地可执行 `docker compose -f deploy/compose.dev.yaml up -d redis`。
+[% endif %][% if enable_redis %]- [ ] 配置 `REDIS_HOST`、`REDIS_PORT`、`REDIS_PASSWORD` 和 `REDIS_DB`。
+[% endif %][% if background_tasks == "taskiq" %]- [ ] 配置 `TASKIQ_BROKER_URL` 与 `TASKIQ_RESULT_BACKEND_URL`。
+[% endif %][% endif %][% if ai_framework == "pydantic_ai" %]
+
+## 模型 endpoint
+
+- [ ] 获取 OpenAI Chat Completions-compatible endpoint 的 key。
+- [ ] 配置 `LLM_BASE_URL`、`LLM_API_KEY` 和 `LLM_MODEL`。
+- [ ] 分别验证 `POST /agent/run` 与 `POST /agent/stream`。
+[% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]
+
+## Logfire
+
+- [ ] 创建项目并配置 `LOGFIRE_TOKEN`。
+- [ ] 确认 service/environment 标签正确。
+- [ ] 检查 telemetry 不包含 model content 或 binary content。
+[% endif %][% if enable_docker %]
+
+## 容器部署
+
+- [ ] 执行 `docker compose -f deploy/compose.prod.yaml config`。
+- [ ] 设置生产环境变量并执行 `docker compose -f deploy/compose.prod.yaml up -d --build`。
+[% if reverse_proxy == "nginx_external" %]- [ ] 将 TLS certificate/key 挂载到 `/etc/nginx/ssl/cert.pem` 与 `/etc/nginx/ssl/key.pem`。
+- [ ] 为 ACME challenge 挂载 `/var/www/certbot`。
+- [ ] 确认 Nginx 容器中的 `host.docker.internal` 能访问 backend host。
+- [ ] 在容器中执行 `nginx -t`。
+[% endif %][% endif %]
+
+## 每次部署后
+
+[% if database == "postgresql" %]- [ ] 执行 database migration。
+[% endif %]- [ ] 请求 `/health`、`/health/live` 和 `/health/ready`。
+- [ ] 使用错误与正确的 API Key 各验证一次业务 API。
+- [ ] 检查日志中没有 credential 或敏感 payload。
+
+进一步参考 `ENV_VARS.md`、`SECURITY.md`[% if enable_docker %] 和 `docs/deploy.md`[% endif %]。

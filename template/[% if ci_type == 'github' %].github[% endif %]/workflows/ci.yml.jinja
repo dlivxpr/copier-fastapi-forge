@@ -2,57 +2,102 @@ name: CI
 
 on:
   push:
+    branches: [main, master]
   pull_request:
+    branches: [main, master]
 
 jobs:
-  quality:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Set up Python
+        run: uv python install [[ python_version ]]
+      - name: Install dependencies
+        run: uv sync --all-groups
+      - name: Run ruff check
+        run: uv run ruff check app tests cli
+      - name: Run ruff format check
+        run: uv run ruff format --check app tests cli
+      - name: Run ty
+        run: uv run ty check
+
+  test:
     runs-on: ubuntu-latest
 [% if database == "postgresql" or enable_redis or background_tasks == "taskiq" %]    services:
 [% if database == "postgresql" %]      postgres:
-        image: postgres:17-alpine
+        image: postgres:16-alpine
         env:
-          POSTGRES_DB: app
+          POSTGRES_DB: [[ project_slug ]]_test
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d app"
-          --health-interval 2s
-          --health-timeout 3s
-          --health-retries 15
+          --health-cmd "pg_isready -U postgres -d [[ project_slug ]]_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 [% endif %][% if enable_redis or background_tasks == "taskiq" %]      redis:
-        image: redis:8-alpine
+        image: redis:7-alpine
         ports:
           - 6379:6379
         options: >-
           --health-cmd "redis-cli ping"
-          --health-interval 2s
-          --health-timeout 3s
-          --health-retries 15
-[% endif %][% endif %]    env:
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+[% endif %][% endif %][% if database == "postgresql" or enable_redis or background_tasks == "taskiq" or (ai_framework == "pydantic_ai" and enable_logfire) %]    env:
 [% if database == "postgresql" %]      POSTGRES_HOST: 127.0.0.1
       POSTGRES_PORT: 5432
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: app
+      POSTGRES_DB: [[ project_slug ]]_test
 [% endif %][% if enable_redis %]      REDIS_HOST: 127.0.0.1
       REDIS_PORT: 6379
 [% endif %][% if background_tasks == "taskiq" %]      TASKIQ_BROKER_URL: redis://127.0.0.1:6379/1
       TASKIQ_RESULT_BACKEND_URL: redis://127.0.0.1:6379/1
 [% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]      LOGFIRE_SEND_TO_LOGFIRE: "false"
-[% endif %]    steps:
+[% endif %][% endif %]    steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-      - run: uv python install [[ python_version ]]
-      - run: uv sync --all-groups
-[% if database == "postgresql" %]      - run: uv run alembic upgrade head
-[% endif %]      - run: uv run python -m compileall -q app tests
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-      - run: uv run ty check
-      - run: uv run pytest
-      - name: Runtime smoke
-        run: uv run python -c "from app.main import app; assert app.title"
+      - name: Set up Python
+        run: uv python install [[ python_version ]]
+      - name: Install dependencies
+        run: uv sync --all-groups
+[% if database == "postgresql" %]      - name: Apply database migrations
+        run: uv run [[ project_slug ]] db upgrade
+[% endif %]      - name: Run tests with coverage
+        run: uv run pytest tests -v --cov=app --cov=cli --cov-report=xml --cov-fail-under=0
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+[% if enable_docker %]
+  docker:
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: false
+          load: true
+          tags: [[ project_slug ]]:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+[% endif %]

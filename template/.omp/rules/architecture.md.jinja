@@ -1,0 +1,15 @@
+---
+description: 服务分层、依赖方向与 lifecycle ownership
+globs:
+  - app/**/*.py
+  - cli/**/*.py
+---
+
+# Architecture
+
+- dependency 方向保持 `route → service → repository`；关闭数据库时为 `route → service`。
+- service 承载业务规则并抛出 domain exception。
+- repository 只负责数据访问，写路径使用 `flush()`/`refresh()`，不拥有 transaction。
+- API transaction 由 session manager 统一提交或回滚。
+- Redis、database、Taskiq 等 resource 必须有显式 owner，并在对应 process 关闭。
+- CLI 只负责参数与 process 启动，不复制业务逻辑。

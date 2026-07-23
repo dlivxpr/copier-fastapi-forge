@@ -2,51 +2,123 @@
 
 [[ project_description ]]
 
-## 本地运行
+## 技术栈
+
+- FastAPI + Uvicorn
+- Pydantic Settings
+- Click 项目 CLI
+[% if database == "postgresql" %]- PostgreSQL + [[ "SQLAlchemy" if orm_type == "sqlalchemy" else "SQLModel" ]] + Alembic
+[% endif %][% if enable_redis %]- Redis async client
+[% endif %][% if enable_caching %]- FastAPICache
+[% endif %][% if enable_rate_limiting %]- SlowAPI
+[% endif %][% if background_tasks == "taskiq" %]- Taskiq + Redis broker/result backend
+[% endif %][% if ai_framework == "pydantic_ai" %]- Pydantic AI，使用 OpenAI Chat Completions-compatible endpoint
+[% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]- Logfire
+[% endif %]
+
+## 前置条件
+
+- Python [[ python_version ]]
+- [uv](https://docs.astral.sh/uv/)
+[% if enable_docker %]- Docker 与 Docker Compose
+[% endif %][% if database == "postgresql" %]- PostgreSQL 17（本地服务或 compose `db`）
+[% endif %][% if enable_redis or background_tasks == "taskiq" %]- Redis 8（本地服务或 compose `redis`）
+[% endif %]
+
+## 本地快速开始
 
 ```bash
 uv sync --all-groups
+cp .env.example .env
 uv run [[ project_slug ]] server run --port [[ backend_port ]]
 ```
 
-公开探针：`/health`、`/health/live`、`/health/ready`。业务 API 使用 `X-API-Key` 请求头。
+Windows PowerShell 可使用 `Copy-Item .env.example .env`。启动后访问：
+
+- API 文档：`http://localhost:[[ backend_port ]]/docs`
+- 健康状态：`http://localhost:[[ backend_port ]]/health`
+- 存活探针：`http://localhost:[[ backend_port ]]/health/live`
+- 就绪探针：`http://localhost:[[ backend_port ]]/health/ready`
+
+除健康探针外，业务 API 使用 `X-API-Key` 请求头；名称可通过 `API_KEY_HEADER` 调整。
+[% if enable_docker %]
+
+## Docker 环境
+
+三套编排均从项目根目录作为 build context：
+
+| 文件 | 用途 |
+|---|---|
+| `deploy/compose.yaml` | 默认单机环境 |
+| `deploy/compose.dev.yaml` | 挂载源码并启用 reload |
+| `deploy/compose.prod.yaml` | 生产进程与持久化基础设施 |
+
+```bash
+docker compose -f deploy/compose.yaml config
+docker compose -f deploy/compose.yaml up --build
+```
+
+镜像使用 multi-stage build、非 root 用户、`HEALTHCHECK` 和项目 CLI 启动。关闭 Docker 选项时，整个 `deploy/` 目录与本节不会生成。
+[% if reverse_proxy == "nginx_external" %]
+
+`deploy/nginx.conf` 是外部 Nginx 配置。部署前挂载 TLS 证书到 `/etc/nginx/ssl/`，并确保容器可解析 `host.docker.internal` 到 backend 所在主机。
+[% endif %][% endif %]
 [% if database == "postgresql" %]
 
 ## PostgreSQL
 
-配置 `POSTGRES_HOST`、`POSTGRES_PORT`、`POSTGRES_USER`、`POSTGRES_PASSWORD` 和 `POSTGRES_DB`，再运行：
+在 `.env` 配置 `POSTGRES_HOST`、`POSTGRES_PORT`、`POSTGRES_USER`、`POSTGRES_PASSWORD` 和 `POSTGRES_DB`：
 
 ```bash
 uv run [[ project_slug ]] db upgrade
 uv run [[ project_slug ]] db current
+uv run [[ project_slug ]] db history
 ```
 
-数据库访问使用 [[ "SQLAlchemy" if orm_type == "sqlalchemy" else "SQLModel" ]] async session；API 请求成功时统一提交，异常时统一回滚。
+API transaction manager 在成功路径统一 `commit()`，异常路径统一 `rollback()`；repository 只调用 `flush()`/`refresh()`。
 [% if include_example_crud %]
 
-Item 示例 API：`POST /api/v1/items`、`GET /api/v1/items/{item_id}`、`PATCH /api/v1/items/{item_id}`、`DELETE /api/v1/items/{item_id}`。
+Item 示例提供 `POST /api/v1/items`、`GET /api/v1/items/{item_id}`、`PATCH /api/v1/items/{item_id}` 和 `DELETE /api/v1/items/{item_id}`。
 [% endif %][% endif %]
 [% if enable_redis %]
 
-## Redis
+## Redis consumers
 
-配置 `REDIS_HOST`、`REDIS_PORT`、`REDIS_PASSWORD` 和 `REDIS_DB`。API lifespan 管理连接，`/health/ready` 验证 Redis。
-[% endif %][% if enable_caching %]
-
-FastAPICache 使用相同的 API Redis connection，并以 `[[ project_slug ]]:cache:` 为 key prefix。
-[% endif %][% if enable_rate_limiting %]
+API lifespan 管理 Redis connection，`/health/ready` 会执行 `ping()`。
+[% if enable_caching %]FastAPICache 复用该 connection，并使用 `[[ project_slug ]]:cache:` key prefix。
+[% endif %][% if enable_rate_limiting and rate_limit_storage == "redis" %]SlowAPI 复用同一 Redis endpoint 作为 storage。
+[% endif %][% endif %]
+[% if enable_rate_limiting %]
 
 ## Rate limiting
 
-SlowAPI 默认限制为 `RATE_LIMIT_REQUESTS` / `RATE_LIMIT_PERIOD`，storage 为 `[[ rate_limit_storage ]]`。业务 route 使用 `rate_limit_low`、`rate_limit_medium` 或 `rate_limit_high` decorator。
+默认限制由 `RATE_LIMIT_REQUESTS`、`RATE_LIMIT_PERIOD` 和 `RATE_LIMIT_STORAGE` 配置。业务 route 按成本使用 `rate_limit_low`、`rate_limit_medium` 或 `rate_limit_high` decorator。
 [% endif %][% if background_tasks == "taskiq" %]
 
 ## Taskiq
 
-Taskiq 使用独立的 `TASKIQ_BROKER_URL` 与 `TASKIQ_RESULT_BACKEND_URL`：
+Taskiq 使用独立的 broker/result backend URL：
 
 ```bash
 uv run [[ project_slug ]] taskiq worker
 uv run [[ project_slug ]] taskiq scheduler
 ```
-[% endif %]
+[% endif %][% if ai_framework == "pydantic_ai" %]
+
+## Agent API
+
+配置 `LLM_BASE_URL`、`LLM_API_KEY` 和 `LLM_MODEL`。`POST /agent/run` 返回 JSON，`POST /agent/stream` 返回 SSE；每个请求独立，不保存请求间状态。
+[% if enable_logfire %]Logfire 默认不采集 model content 或 binary content；设置 `LOGFIRE_TOKEN` 后发送 telemetry。
+[% endif %][% endif %]
+
+## 开发命令
+
+```bash
+uv run ruff check .
+uv run ruff format --check .
+uv run ty check
+uv run pytest
+uv run [[ project_slug ]] server routes
+```
+
+更多说明：`ENV_VARS.md`、`SECURITY.md`、`CONTRIBUTING.md`、`MANUAL_STEPS.md` 与 `docs/`。

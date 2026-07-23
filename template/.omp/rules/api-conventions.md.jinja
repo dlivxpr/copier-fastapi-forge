@@ -1,0 +1,14 @@
+---
+description: FastAPI route、dependency 与 response contract 约定
+globs:
+  - app/api/**/*.py
+---
+
+# API conventions
+
+- route 只处理 HTTP 输入、dependency、status、headers 与 response schema。
+- 业务规则进入 service；route 不直接访问 repository。
+- `/health`、`/health/live`、`/health/ready` 保持公开，业务 route 挂载 deployment API Key dependency。
+- dependency 优先使用 `Annotated` alias；测试结束后清理 `app.dependency_overrides`。
+- I/O route 使用 `async def`，显式声明 response model 与 status code。
+- 失败使用 `AppException`，不要在 route 自行拼装 error envelope。

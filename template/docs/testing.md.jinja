@@ -1,0 +1,50 @@
+# 测试指南
+
+## 运行
+
+```bash
+uv run pytest
+uv run pytest tests/test_api.py -q
+uv run pytest --cov=app --cov-report=xml
+```
+
+## HTTP seam
+
+使用 HTTPX `AsyncClient` 与 `ASGITransport` 通过公开 route 验证 method、path、header、status 和 response body。不要直接调用 route function。
+
+健康探针应覆盖 `/health`、`/health/live` 和 `/health/ready`；业务 route 同时覆盖缺少、错误和正确 API Key。
+
+## Dependency override
+
+通过 `app.dependency_overrides` 替换外部 dependency。fixture teardown 必须清空 override，禁止测试间泄漏。
+[% if database == "postgresql" %]
+
+## PostgreSQL
+
+集成测试使用独立 test database，先运行 Alembic，再通过 HTTP seam 验证业务 contract。需要验证成功 commit、异常 rollback，以及 repository 不提前提交。
+[% endif %][% if enable_redis %]
+
+## Redis
+
+使用真实 Redis 验证 connect、operation、readiness 与 close；测试结束后清理使用的 key。
+[% endif %][% if enable_caching %]
+
+## Cache
+
+通过公开 cached function 验证 hit/miss 与 prefix；shutdown 后确认 backend reset。
+[% endif %][% if enable_rate_limiting %]
+
+## Rate limiting
+
+验证窗口边界、429 envelope 和 storage 配置。Redis storage 使用隔离 key，memory storage 不跨 process 共享。
+[% endif %][% if background_tasks == "taskiq" %]
+
+## Taskiq
+
+验证 broker/result backend/scheduler 初始化与关闭，不为测试向应用加入示例 task 或 route。
+[% endif %][% if ai_framework == "pydantic_ai" %]
+
+## Agent
+
+使用本地 Chat Completions-compatible server，通过真实 model adapter 验证 JSON、SSE、tool frame、错误以及请求间无状态。
+[% endif %]

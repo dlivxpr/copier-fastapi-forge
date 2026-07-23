@@ -1,0 +1,12 @@
+---
+name: background-task
+description: 添加或修改 Taskiq task、worker 与 scheduler 行为时使用。
+---
+
+# Background task
+
+1. 在业务所属模块通过 `broker.task` 定义 task；bootstrap 只配置 broker/backend/scheduler。
+2. 输入必须可序列化；resource dependency 在 worker process 内显式创建和关闭。
+3. 通过 `TASKIQ_BROKER_URL` 与 `TASKIQ_RESULT_BACKEND_URL` 配置，不复用 API Redis client lifecycle。
+4. 使用 `uv run [[ project_slug ]] taskiq worker` 与 `uv run [[ project_slug ]] taskiq scheduler` 运行。
+5. 测试真实 broker/result backend contract，不添加示例 task 或测试 route。

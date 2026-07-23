@@ -1,0 +1,7 @@
+---
+description: 审查改动的 contract、架构、安全与测试风险
+---
+
+审查 `$ARGUMENTS`。
+
+以仓库 `AGENTS.md` 和用户 contract 为标准，检查行为正确性、dependency 方向、resource lifecycle、transaction ownership、secret handling、能力开关边界与测试有效性。优先报告可复现缺陷，按严重度列出精确文件位置和触发条件。不要把风格偏好当成缺陷；没有发现时明确说明已检查范围与剩余验证风险。

@@ -1,0 +1,62 @@
+# 配置参考
+
+应用通过 `pydantic-settings` 从环境变量和项目根目录 `.env` 加载配置。字段、类型、默认值与 validator 位于 `app/core/config.py`；变量说明见 `ENV_VARS.md`。
+
+## 开始配置
+
+```bash
+cp .env.example .env
+uv run python -c "from app.core.config import settings; print(settings.PROJECT_NAME)"
+```
+
+不要提交 `.env`。生产 secret 应由部署平台注入。
+
+## Deployment API Key
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `API_KEY` | 生成时设置 | 业务 API key |
+| `API_KEY_HEADER` | `X-API-Key` | 请求头名称 |
+
+健康探针不要求 key，其他业务 route 必须使用统一 dependency。
+[% if database == "postgresql" %]
+
+## PostgreSQL
+
+连接设置由 `POSTGRES_*` 与 `DB_POOL_*` 字段组成。API 使用 async driver；migration CLI 使用 Alembic。compose 内部将 `POSTGRES_HOST` 对应到 `db` service。
+[% endif %][% if enable_redis %]
+
+## Redis
+
+`REDIS_HOST`、`REDIS_PORT`、`REDIS_PASSWORD` 和 `REDIS_DB` 构成 API Redis URL。connection 由 lifespan 初始化和关闭。
+[% endif %][% if enable_rate_limiting %]
+
+## Rate limiting
+
+`RATE_LIMIT_REQUESTS` 与 `RATE_LIMIT_PERIOD` 定义默认窗口。`RATE_LIMIT_STORAGE=[[ rate_limit_storage ]]`；选择 Redis storage 时复用 API Redis endpoint。
+[% endif %][% if background_tasks == "taskiq" %]
+
+## Taskiq
+
+`TASKIQ_BROKER_URL` 与 `TASKIQ_RESULT_BACKEND_URL` 独立配置。worker 与 scheduler process 不从 API lifespan 获取 connection。
+[% endif %][% if ai_framework == "pydantic_ai" %]
+
+## Pydantic AI
+
+`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL` 定义唯一模型接口。Base URL 必须支持 OpenAI Chat Completions contract。
+[% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]
+
+## Logfire
+
+`LOGFIRE_TOKEN`、`LOGFIRE_SERVICE_NAME` 与 `LOGFIRE_ENVIRONMENT` 控制 telemetry。instrumentation 在 `logfire.configure()` 之后注册。
+[% endif %][% if enable_cors %]
+
+## CORS
+
+列表字段使用 JSON syntax，例如：
+
+```dotenv
+CORS_ORIGINS=["https://api.example.com"]
+CORS_ALLOW_METHODS=["GET","POST"]
+```
+[% endif %]

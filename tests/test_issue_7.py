@@ -398,6 +398,8 @@ def _legacy_context(profile: dict[str, object]) -> dict[str, object]:
             "use_taskiq": profile["background_tasks"] == "taskiq",
             "rate_limit_storage_memory": profile.get("rate_limit_storage") == "memory",
             "rate_limit_storage_redis": profile.get("rate_limit_storage") == "redis",
+            "use_github_actions": profile.get("ci_type") == "github",
+            "use_nginx": profile.get("reverse_proxy") == "nginx_external",
         }
     )
     return defaults
@@ -461,6 +463,23 @@ def test_migration_equivalence_manifest_rejects_unregistered_content(
             **base_profile,
             "ai_framework": "pydantic_ai",
             "enable_logfire": True,
+        },
+        "delivery": {
+            **base_profile,
+            "database": "postgresql",
+            "orm_type": "sqlalchemy",
+            "include_example_crud": True,
+            "ai_framework": "pydantic_ai",
+            "enable_logfire": True,
+            "enable_cors": True,
+            "enable_docker": True,
+            "reverse_proxy": "nginx_external",
+            "ci_type": "github",
+            "background_tasks": "taskiq",
+            "enable_redis": True,
+            "enable_caching": True,
+            "enable_rate_limiting": True,
+            "rate_limit_storage": "redis",
         },
     }
 

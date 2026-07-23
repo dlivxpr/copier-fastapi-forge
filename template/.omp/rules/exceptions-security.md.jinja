@@ -1,0 +1,14 @@
+---
+description: 异常 envelope、凭据与日志安全约定
+globs:
+  - app/**/*.py
+---
+
+# Exceptions and security
+
+- service 抛出具体 `AppException` 子类；异常类拥有 `code` 与 `status_code`。
+- error response 保持 `{ "error": { "code", "message", "details" } }`。
+- 未处理异常记录内部 traceback，但只返回安全的 `INTERNAL_ERROR`。
+- API Key 使用统一 dependency 和 constant-time compare；不要在 route 重复实现。
+- 日志、trace、错误和测试 fixture 不得输出 key、token、password 或 secret。
+- Request ID 通过 `X-Request-ID` 关联日志和 response。

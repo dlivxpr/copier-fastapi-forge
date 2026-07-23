@@ -1,0 +1,7 @@
+---
+description: 根据 issue contract 诊断、实现并验证修复
+---
+
+修复 `$ARGUMENTS`。
+
+先读取 issue 与 `AGENTS.md`，复现问题并确定公开 seam。写一个能复现 regression 的失败测试，只修改根因，不扩大范围。逐步运行目标测试与 `uv run ty check`。完成后运行 Ruff、format check 和完整 pytest，报告实际验证证据与仍存在的风险。

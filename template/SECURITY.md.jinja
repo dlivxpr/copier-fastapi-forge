@@ -1,0 +1,43 @@
+# 安全
+
+## 报告漏洞
+
+请通过仓库的私有安全通道联系 `[[ author_email ]]`，并提供受影响版本、复现步骤、影响评估和建议修复。公开前请保留合理的修复窗口；不要在报告中附带真实凭据或个人数据。
+
+## 安全模型
+
+### API 访问
+
+- `/health`、`/health/live`、`/health/ready` 是公开探针。
+- 其他业务 route 使用 deployment API Key dependency。
+- Key 来自 `API_KEY`，header 名称来自 `API_KEY_HEADER`；比较使用 constant-time 操作。
+- API Key 只用于服务部署边界。生产环境应使用随机高熵值并定期轮换。
+
+### 传输与网络
+
+[% if enable_cors %]- `CORS_ORIGINS` 必须收敛到可信 origin；生产环境不要保留通配配置。
+[% endif %][% if enable_docker and reverse_proxy == "nginx_external" %]- `deploy/nginx.conf` 提供 HTTP→HTTPS、TLS、ACME challenge、security headers 与 forwarded headers。
+- TLS private key 只挂载到 Nginx 容器，不进入应用镜像。
+[% else %]- 在外部 load balancer 或 reverse proxy 终止 TLS，并向应用传递可信 forwarded headers。
+[% endif %]
+
+### 错误、日志与数据
+
+- 对外错误保持 `{ "error": { "code", "message", "details" } }`，未处理异常不泄露内部 traceback。
+- 日志不得包含 API Key、token、password 或 secret。
+- 配置通过环境变量加载；`.env` 不得提交。
+[% if database == "postgresql" %]- 数据库账号遵循最小权限；migration 账号与 runtime 账号可在生产环境分离。
+[% endif %][% if enable_redis or background_tasks == "taskiq" %]- Redis 不应直接暴露到公网；生产环境启用网络隔离和访问控制。
+[% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]- Logfire instrumentation 保持 `include_content=False` 与 `include_binary_content=False`。
+[% endif %]
+
+## 生产加固清单
+
+- [ ] 轮换生成时的 `API_KEY`。
+- [ ] 设置 `ENVIRONMENT=production`，关闭 debug。
+- [ ] 只通过 TLS 暴露业务流量。
+- [ ] 限制 secret、数据库和 Redis 的网络与账号权限。
+- [ ] 验证日志、trace 和错误响应不含敏感数据。
+[% if database == "postgresql" %]- [ ] 备份 PostgreSQL，并演练恢复与 migration rollback 策略。
+[% endif %][% if enable_docker %]- [ ] 以 non-root image 运行，并对 image digest 与基础镜像更新建立流程。
+[% endif %]- [ ] 在部署后请求 `/health/ready` 并验证依赖检查。

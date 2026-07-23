@@ -1,0 +1,35 @@
+# How-to：添加 Taskiq task
+
+Taskiq task 在独立 worker process 中运行。输入必须可序列化；resource dependency 必须在 worker process 内显式创建并关闭。
+
+## 1. 定义 task
+
+在 `app/worker/taskiq_app.py` 的 broker 初始化和 lifecycle handler 之后添加：
+
+```python
+@broker.task
+async def normalize_label(value: str) -> dict[str, str]:
+    """Normalize one label."""
+    return {"normalized": value.strip().lower()}
+```
+
+不要在 task 中复用 API lifespan 的 Redis client、database session 或 request state。
+
+## 2. 调度 task
+
+从 service 显式调用：
+
+```python
+task = await normalize_label.kiq("Example")
+```
+
+需要 schedule 时使用 Taskiq label schedule，并保持 worker 与 scheduler 连接同一 `TASKIQ_BROKER_URL` 和 `TASKIQ_RESULT_BACKEND_URL`。
+
+## 3. 运行与验证
+
+```bash
+uv run [[ project_slug ]] taskiq worker
+uv run [[ project_slug ]] taskiq scheduler
+```
+
+使用真实 Redis 验证 broker、result backend、task result 和 process shutdown；不要为测试添加 runtime fallback。

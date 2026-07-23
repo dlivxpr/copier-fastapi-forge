@@ -10,7 +10,7 @@
 - `app/core/`：Settings、异常、日志和 Request ID middleware。
 - `cli/commands.py`：项目管理 CLI。
 - `tests/`：通过 HTTPX `AsyncClient` + `ASGITransport` 验证公开行为。
-[% if database == "postgresql" %]- `app/db/session.py`：API transaction owner，以及使用独立 `NullPool` engine 的 worker context。
+[% if database == "postgresql" %]- `app/db/session.py`：API session manager 统一 transaction 边界；worker context 使用独立 `NullPool` engine。
 - `alembic/`：PostgreSQL migration；通过 `uv run [[ project_slug ]] db ...` 管理。
 [% endif %][% if database == "postgresql" and include_example_crud %]- `app/db/models/item.py` → `app/repositories/item.py` → `app/services/item.py` → `app/api/items.py`：可选 Item CRUD。
 [% endif %]
@@ -21,13 +21,17 @@
 [% endif %][% if ai_framework == "pydantic_ai" %]- `app/agents/assistant.py`：无请求间可变状态的单轮 Pydantic AI Agent；模型通过 OpenAI Chat Completions-compatible endpoint 调用。
 - `app/api/agent.py`：deployment API Key 保护的 `POST /agent/run` JSON 与 `POST /agent/stream` SSE transport。
 [% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]- `app/core/telemetry.py`：configure-first 的 Logfire Pydantic AI instrumentation；默认不采集 model 或 binary content。
+[% endif %][% if enable_docker %]- `deploy/Dockerfile` 与三套 `deploy/compose*.yaml`：root-context、non-root backend image 和环境编排。
+[% if reverse_proxy == "nginx_external" %]- `deploy/nginx.conf`：外部 TLS reverse proxy；upstream 必须是容器可达的 backend host。
+[% endif %][% endif %][% if ci_type == "github" %]- `.github/workflows/ci.yml`：独立 lint/test[% if enable_docker %]/docker[% endif %] jobs。
 [% endif %]
 
 ```bash
 uv sync --all-groups
 uv run [[ project_slug ]] server run --port [[ backend_port ]]
 uv run pytest
-```
+[% if enable_docker %]docker compose -f deploy/compose.yaml config
+[% endif %]```
 
 ## 运行时 contract
 
@@ -42,15 +46,15 @@ uv run pytest
 [% if database == "postgresql" %]- API session manager 在成功路径 `commit()`、异常路径 `rollback()`；repository 只使用 `flush()`/`refresh()`。
 - worker 使用 `get_worker_db_context()` 创建独立 engine 和 `NullPool`，退出时必须 dispose。
 - migration 使用 `uv run [[ project_slug ]] db upgrade` 执行；readiness 通过数据库 session 执行 `SELECT 1`。
-[% endif %][% if database == "postgresql" and include_example_crud %]- Item 仅提供 create/get/update/delete；不添加 owner/user 外键、list endpoint 或分页 schema。
+[% endif %][% if database == "postgresql" and include_example_crud %]- Item 仅提供 create/get/update/delete。
 [% endif %]
 [% if enable_redis %]- Redis client 必须由 API lifespan `connect()`/`close()`；readiness 通过注入的 client 执行 `ping()`。
 [% endif %][% if enable_caching %]- FastAPICache 与 Redis client 共享 binary connection；shutdown 时调用 `FastAPICache.reset()`。
 [% endif %][% if enable_rate_limiting %]- Rate limiting 使用 [[ "Redis shared storage" if rate_limit_storage == "redis" else "process-local memory storage" ]]；业务 route 按成本选择 `rate_limit_low`、`rate_limit_medium` 或 `rate_limit_high`。
 [% endif %][% if background_tasks == "taskiq" %]- Taskiq 只使用 `TASKIQ_BROKER_URL` 与 `TASKIQ_RESULT_BACKEND_URL`，不复用 API Redis client 生命周期。
 - 使用 `uv run [[ project_slug ]] taskiq worker` 和 `uv run [[ project_slug ]] taskiq scheduler` 启动进程；业务 task 在调用方模块中通过 `broker.task` 定义。
-[% endif %][% if ai_framework == "pydantic_ai" %]- 每次 Agent 请求只包含当前 `input`；不接收 history、messages 或 conversation，不跨请求保存推理状态。
-- `LLM_BASE_URL`、`LLM_API_KEY` 和 `LLM_MODEL` 定义唯一模型接口；不添加 provider 分支。
+[% endif %][% if ai_framework == "pydantic_ai" %]- 每次 Agent 请求只使用当前 `input` 与当前 `Deps`；请求结束后不保留推理状态。
+- `LLM_BASE_URL`、`LLM_API_KEY` 和 `LLM_MODEL` 定义唯一兼容模型接口。
 - SSE transport 只转换 content、tool call/result、complete 和 error frame，不承担 session 或 orchestration。
 [% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]- Logfire 只 instrument Pydantic AI，且保持 `include_content=False` 与 `include_binary_content=False`。
 [% endif %]

@@ -1,0 +1,14 @@
+---
+description: 公开 seam、资源隔离与集成测试约定
+globs:
+  - tests/**/*.py
+---
+
+# Testing
+
+- 通过公开接口验证 observable contract，不断言 private helper 或模板源码细节。
+- HTTP 测试使用 HTTPX `AsyncClient` + `ASGITransport`。
+- 每个测试结束后清理 `app.dependency_overrides` 和创建的外部资源。
+- 外部基础设施行为使用真实 service；不要为测试加入业务 route、task 或 runtime fallback。
+- 每个 test 必须能对 plausible regression 失败；避免 tautology 和只检查 import。
+- 先运行最窄 test file，再运行完整 `uv run pytest`。

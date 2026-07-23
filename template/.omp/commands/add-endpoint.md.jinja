@@ -1,0 +1,7 @@
+---
+description: 按项目分层添加 FastAPI endpoint
+---
+
+为 `$ARGUMENTS` 添加 endpoint。
+
+先读取 `AGENTS.md`、相关 route/service/schema 和测试。明确 method、path、API Key 边界、request/response schema、status 与 error contract。按现有分层实现；数据库启用时保持 route → service → repository，并由 session manager 拥有 transaction。先通过公开 HTTP seam 写失败测试，再做最小实现。最后运行目标测试、Ruff、ty 和完整 pytest。

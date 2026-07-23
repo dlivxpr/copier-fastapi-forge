@@ -1,0 +1,32 @@
+# How-to：添加 API endpoint
+
+本指南通过公开 HTTP contract 添加一个薄 route。route 只处理输入、dependency、status 和 response；业务规则进入 service。
+
+## 1. 定义 schema
+
+在 `app/schemas/` 定义 request 与 response model。为字段写清边界和 validator，不在 schema 中执行 I/O。
+
+## 2. 实现 service
+
+在 `app/services/` 实现业务规则，并用 `AppException` 子类表达可预期失败。不要返回 `None` 或临时 `dict` 代替 domain failure。
+[% if database == "postgresql" %]
+## 3. 接入 PostgreSQL
+
+1. 在 `app/db/models/` 添加 model，并保持 identifier 与 timestamp 类型明确。
+2. 在 `app/repositories/` 添加 async 数据访问；写操作使用 `flush()`/`refresh()`，不要提交 transaction。
+3. 在 `app/api/deps.py` 构造 service，使 session manager 继续拥有 `commit()`/`rollback()`。
+4. 创建并检查 migration：
+
+```bash
+uv run [[ project_slug ]] db migrate --message "describe change"
+uv run [[ project_slug ]] db upgrade
+uv run [[ project_slug ]] db current
+```
+[% endif %]
+## [% if database == "postgresql" %]4[% else %]3[% endif %]. 注册 dependency 与 route
+
+在 `app/api/deps.py` 注册 service dependency；在 `app/api/` 添加 `APIRouter`，并在 `app/api/router.py` 挂载。除公开 health route 外，endpoint 必须使用 deployment API Key dependency。
+
+## [% if database == "postgresql" %]5[% else %]4[% endif %]. 验证公开 contract
+
+使用 HTTPX `AsyncClient` 与 `ASGITransport` 验证 method、path、status、response schema、API Key 边界和 error envelope。测试结束后清理 `app.dependency_overrides`。
