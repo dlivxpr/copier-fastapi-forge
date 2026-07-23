@@ -293,8 +293,10 @@ def smoke_taskiq_process(
         if process.poll() is None:
             output, forced = stop_process_group(process)
     assert not forced, f"{' '.join(command)} required a forced shutdown:\n{output}"
-    expected_return_codes = {0, 0xC000013A} if os.name == "nt" else {0, 130, -signal.SIGINT}
+    expected_return_codes = {0, 0xC000013A} if os.name == "nt" else {0, 1, 130, -signal.SIGINT}
     assert process.returncode in expected_return_codes, output
+    if process.returncode == 1:
+        assert "Aborted!" in output
 
 
 def test_taskiq_process_commands_start_and_stop_against_real_redis(
