@@ -9,6 +9,8 @@ from slowapi.middleware import SlowAPIASGIMiddleware
 [% endif %][% if enable_cors %]from starlette.middleware.cors import CORSMiddleware
 [% endif %][% if enable_rate_limiting %]from starlette.responses import Response
 [% endif %]
+[% if ai_framework == "pydantic_ai" %]from app.api.agent import router as agent_router
+[% endif -%]
 from app.api.exception_handlers import [% if enable_rate_limiting %]app_exception_handler, [% endif %]register_exception_handlers
 from app.api.health import router as health_router
 from app.api.router import api_router
@@ -19,6 +21,7 @@ from app.api.router import api_router
 [% endif %]from app.core.logging import setup_logging
 from app.core.middleware import RequestIDMiddleware
 [% if enable_rate_limiting %]from app.core.rate_limit import limiter
+[% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]from app.core.telemetry import configure_telemetry
 [% endif %][% if database == "postgresql" %]from app.db.session import close_db
 [% endif -%]
 [[ "\n\n" -]]
@@ -57,6 +60,8 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     show_docs = settings.ENVIRONMENT in SHOW_DOCS_ENVIRONMENTS
     setup_logging()
+[% if ai_framework == "pydantic_ai" and enable_logfire %]    configure_telemetry()
+[% endif %]
     app = FastAPI(
         title=settings.PROJECT_NAME,
         summary="FastAPI application",
@@ -83,6 +88,8 @@ def create_app() -> FastAPI:
         allow_headers=settings.CORS_ALLOW_HEADERS,
     )
 [% endif %]    app.include_router(health_router)
+[% if ai_framework == "pydantic_ai" %]    app.include_router(agent_router)
+[% endif %]
     app.include_router(api_router, prefix=settings.API_V1_STR)
     return app
 

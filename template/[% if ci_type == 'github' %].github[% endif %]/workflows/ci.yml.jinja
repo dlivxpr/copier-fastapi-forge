@@ -40,7 +40,7 @@ jobs:
       REDIS_PORT: 6379
 [% endif %][% if background_tasks == "taskiq" %]      TASKIQ_BROKER_URL: redis://127.0.0.1:6379/1
       TASKIQ_RESULT_BACKEND_URL: redis://127.0.0.1:6379/1
-[% endif %][% if enable_logfire %]      LOGFIRE_SEND_TO_LOGFIRE: "false"
+[% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]      LOGFIRE_SEND_TO_LOGFIRE: "false"
 [% endif %]    steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6

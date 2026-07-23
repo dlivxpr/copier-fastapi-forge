@@ -15,7 +15,7 @@ from pydantic_ai import (
 )
 from pydantic_core import to_jsonable_python
 
-from app.agents.assistant import AgentDependencies, AssistantAgent
+from app.agents.assistant import AssistantAgent, Deps
 from app.core.exceptions import AgentInvocationError
 
 
@@ -26,20 +26,22 @@ class AgentStreamFrame:
 
 
 class AgentInvocationService:
-    def __init__(self, agent: AssistantAgent, dependencies: AgentDependencies) -> None:
+    """Adapt one agent invocation to the JSON and SSE transport contracts."""
+
+    def __init__(self, agent: AssistantAgent, dependencies: Deps) -> None:
         self._agent = agent
         self._dependencies = dependencies
 
     async def run(self, current_input: str) -> str:
         try:
-            result = await self._agent.run(current_input, deps=self._dependencies)
+            output, _, _ = await self._agent.run(current_input, deps=self._dependencies)
         except Exception:
             raise AgentInvocationError from None
-        return result.output
+        return output
 
     async def stream(self, current_input: str) -> AsyncGenerator[AgentStreamFrame, None]:
         try:
-            async with self._agent.run_stream_events(
+            async with self._agent.agent.run_stream_events(
                 current_input,
                 deps=self._dependencies,
             ) as events:

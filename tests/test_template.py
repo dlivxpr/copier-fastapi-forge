@@ -52,7 +52,8 @@ def test_default_profile_restores_legacy_enabled_and_disabled_capabilities(
     assert (project / "app" / "db" / "session.py").is_file()
     assert "sqlalchemy[asyncio]" in text
     assert "pydantic-ai-slim[openai]" in text
-    assert "logfire[fastapi,pydantic-ai]" in text
+    assert '"logfire>=4.0.0"' in text
+    assert "logfire[" not in text
     assert (project / "app" / "agents" / "assistant.py").is_file()
     assert "CORS_ORIGINS" in text
     assert (project / "deploy" / "Dockerfile").is_file()
@@ -116,9 +117,9 @@ def test_default_profile_restores_legacy_enabled_and_disabled_capabilities(
             ),
         ),
         (
-            {"ai_framework": "none", "enable_logfire": False},
-            {"ai_framework": "none", "enable_logfire": True},
-            ("logfire[fastapi]>=", "LOGFIRE_TOKEN", "configure_telemetry"),
+            {"ai_framework": "pydantic_ai", "enable_logfire": False},
+            {"ai_framework": "pydantic_ai", "enable_logfire": True},
+            ("logfire>=4.0.0", "LOGFIRE_TOKEN", "configure_telemetry"),
             ("app/core/telemetry.py",),
         ),
         (

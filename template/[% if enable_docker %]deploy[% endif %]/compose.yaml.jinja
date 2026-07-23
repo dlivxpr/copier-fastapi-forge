@@ -13,7 +13,7 @@ services:
 [% endif %][% if ai_framework == "pydantic_ai" %]      LLM_BASE_URL: "${LLM_BASE_URL:-https://api.example.com/v1}"
       LLM_API_KEY: "${LLM_API_KEY:-model-key-CHANGEME}"
       LLM_MODEL: "${LLM_MODEL:-model-name-CHANGEME}"
-[% endif %][% if enable_logfire %]      LOGFIRE_TOKEN: "${LOGFIRE_TOKEN:-}"
+[% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]      LOGFIRE_TOKEN: "${LOGFIRE_TOKEN:-}"
 [% endif %]    ports:
       - "8000:8000"
 [% if database == "postgresql" or enable_redis or background_tasks == "taskiq" %]    depends_on:
@@ -35,8 +35,6 @@ services:
     environment:
       TASKIQ_BROKER_URL: redis://redis:6379/1
       TASKIQ_RESULT_BACKEND_URL: redis://redis:6379/1
-[% if enable_logfire %]      LOGFIRE_TOKEN: "${LOGFIRE_TOKEN:-}"
-[% endif %]
     depends_on:
       redis:
         condition: service_healthy
@@ -49,8 +47,6 @@ services:
     environment:
       TASKIQ_BROKER_URL: redis://redis:6379/1
       TASKIQ_RESULT_BACKEND_URL: redis://redis:6379/1
-[% if enable_logfire %]      LOGFIRE_TOKEN: "${LOGFIRE_TOKEN:-}"
-[% endif %]
     depends_on:
       redis:
         condition: service_healthy

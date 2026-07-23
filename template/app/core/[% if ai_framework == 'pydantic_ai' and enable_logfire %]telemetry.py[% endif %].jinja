@@ -1,0 +1,20 @@
+from functools import cache
+
+import logfire
+
+from app.core.config import settings
+
+
+@cache
+def configure_telemetry() -> None:
+    """Configure Logfire and content-safe Pydantic AI instrumentation once."""
+    logfire.configure(
+        token=settings.LOGFIRE_TOKEN,
+        service_name=settings.LOGFIRE_SERVICE_NAME,
+        environment=settings.LOGFIRE_ENVIRONMENT,
+        send_to_logfire="if-token-present",
+    )
+    logfire.instrument_pydantic_ai(
+        include_content=False,
+        include_binary_content=False,
+    )

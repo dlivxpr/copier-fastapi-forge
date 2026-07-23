@@ -71,7 +71,13 @@ class BadRequestError(AppException):
     message = "External service unavailable"
     code = "EXTERNAL_SERVICE_ERROR"
     status_code = 503
+[% if ai_framework == "pydantic_ai" %]
 
+class AgentInvocationError(ExternalServiceError):
+    message = "Agent invocation failed"
+    code = "AGENT_INVOCATION_ERROR"
+    status_code = 502
+[% endif %]
 
 [% if database == "postgresql" %]class DatabaseError(AppException):
     message = "Database error"

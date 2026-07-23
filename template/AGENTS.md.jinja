@@ -18,6 +18,9 @@
 [% endif %][% if enable_caching %]- `app/core/cache.py`：复用 API Redis client 的 FastAPICache backend。
 [% endif %][% if enable_rate_limiting %]- `app/core/rate_limit.py`：SlowAPI limiter 与 low/medium/high decorators。
 [% endif %][% if background_tasks == "taskiq" %]- `app/worker/taskiq_app.py`：独立 Taskiq broker、result backend 与 scheduler。
+[% endif %][% if ai_framework == "pydantic_ai" %]- `app/agents/assistant.py`：无请求间可变状态的单轮 Pydantic AI Agent；模型通过 OpenAI Chat Completions-compatible endpoint 调用。
+- `app/api/agent.py`：deployment API Key 保护的 `POST /agent/run` JSON 与 `POST /agent/stream` SSE transport。
+[% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]- `app/core/telemetry.py`：configure-first 的 Logfire Pydantic AI instrumentation；默认不采集 model 或 binary content。
 [% endif %]
 
 ```bash
@@ -46,6 +49,10 @@ uv run pytest
 [% endif %][% if enable_rate_limiting %]- Rate limiting 使用 [[ "Redis shared storage" if rate_limit_storage == "redis" else "process-local memory storage" ]]；业务 route 按成本选择 `rate_limit_low`、`rate_limit_medium` 或 `rate_limit_high`。
 [% endif %][% if background_tasks == "taskiq" %]- Taskiq 只使用 `TASKIQ_BROKER_URL` 与 `TASKIQ_RESULT_BACKEND_URL`，不复用 API Redis client 生命周期。
 - 使用 `uv run [[ project_slug ]] taskiq worker` 和 `uv run [[ project_slug ]] taskiq scheduler` 启动进程；业务 task 在调用方模块中通过 `broker.task` 定义。
+[% endif %][% if ai_framework == "pydantic_ai" %]- 每次 Agent 请求只包含当前 `input`；不接收 history、messages 或 conversation，不跨请求保存推理状态。
+- `LLM_BASE_URL`、`LLM_API_KEY` 和 `LLM_MODEL` 定义唯一模型接口；不添加 provider 分支。
+- SSE transport 只转换 content、tool call/result、complete 和 error frame，不承担 session 或 orchestration。
+[% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]- Logfire 只 instrument Pydantic AI，且保持 `include_content=False` 与 `include_binary_content=False`。
 [% endif %]
 ## 约束
 

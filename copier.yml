@@ -160,6 +160,7 @@ enable_logfire:
   type: bool
   help: Enable Logfire observability
   default: true
+  when: "[[ ai_framework == 'pydantic_ai' ]]"
 
 enable_cors:
   type: bool

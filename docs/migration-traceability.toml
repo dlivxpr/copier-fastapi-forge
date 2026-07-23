@@ -486,3 +486,131 @@ allowed_transformations = ["删除 V1 排除 commands", "保留 server 与 Taski
 removed_references = ["用户、Celery、database 与 custom commands"]
 approved_deviation = ["subprocess.run 使用 check=True"]
 verification = ["test_taskiq_process_commands_start_and_stop_against_real_redis"]
+
+# Issue #10 单轮 Agent 与 Pydantic AI-only Logfire profile。
+
+[[target]]
+profile = "agent_logfire"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/pyproject.toml"
+target = "pyproject.toml"
+allowed_transformations = ["Copier 模板语法", "仅保留 Pydantic AI、OpenAI-compatible 与 Logfire 依赖", "依赖版本兼容修改"]
+removed_references = ["替代 Agent/provider SDK 与非 Pydantic AI Logfire extras"]
+approved_deviation = ["OpenAI Chat Completions-compatible 模型接口", "Logfire base package 不请求不存在的 pydantic-ai extra"]
+verification = ["test_agent_and_logfire_generation_boundaries_follow_legacy_defaults", "test_agent_and_logfire_pass_real_chat_completions_contract"]
+
+[[target]]
+profile = "agent_logfire"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/.env.example"
+target = ".env.example"
+allowed_transformations = ["Copier 模板语法", "仅保留 LLM_* 与 Logfire 环境变量"]
+removed_references = ["provider 分支、conversation 与其他 V1 排除能力变量"]
+approved_deviation = ["LLM_BASE_URL、LLM_API_KEY、LLM_MODEL 定义唯一模型接口"]
+verification = ["test_agent_and_logfire_generation_boundaries_follow_legacy_defaults"]
+
+[[target]]
+profile = "agent_logfire"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/main.py"
+target = "app/main.py"
+allowed_transformations = ["删除 V1 排除生命周期", "挂载根级 Agent HTTP router", "configure-first Logfire"]
+removed_references = ["WebSocket、conversation、用户/JWT 与非 Agent instrumentation"]
+approved_deviation = ["Agent 使用根级 /agent/run 与 /agent/stream", "Logfire 仅在 Agent+Logfire profile 初始化"]
+verification = ["test_agent_and_logfire_pass_real_chat_completions_contract"]
+
+[[target]]
+profile = "agent_logfire"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/core/config.py"
+target = "app/core/config.py"
+allowed_transformations = ["删除 provider 与排除能力 Settings", "保留 LLM_* 与 Logfire Settings"]
+removed_references = ["AI history、provider keys、RAG、skills 与 orchestration Settings"]
+approved_deviation = ["单一 OpenAI Chat Completions-compatible 模型接口"]
+verification = ["test_agent_and_logfire_generation_boundaries_follow_legacy_defaults"]
+
+[[target]]
+profile = "agent_logfire"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/core/exceptions.py"
+target = "app/core/exceptions.py"
+allowed_transformations = ["删除排除能力异常", "增加 Agent transport 失败封装"]
+removed_references = ["用户/JWT、billing、文件与 conversation 异常"]
+approved_deviation = ["AgentInvocationError 以稳定 502 envelope 隐藏上游细节"]
+verification = ["test_agent_and_logfire_pass_real_chat_completions_contract"]
+
+[[target]]
+profile = "agent_logfire"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/api/deps.py"
+target = "app/api/deps.py"
+allowed_transformations = ["删除身份与排除 service dependencies", "增加无状态 Agent factories"]
+removed_references = ["CurrentUser、conversation、RAG、ask-user 与 provider dependencies"]
+approved_deviation = ["deployment API Key 保护 Agent routes", "每次请求创建空 Deps"]
+verification = ["test_agent_and_logfire_pass_real_chat_completions_contract"]
+
+[[target]]
+profile = "agent_logfire"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/agents/assistant.py"
+target = "app/agents/assistant.py"
+allowed_transformations = ["Copier 模板语法", "删除 V1 排除 tools、provider 分支与多轮状态", "OpenAIChatModel 路径适配"]
+removed_references = ["ask_user、RAG、charts、code、skills、todo、subagents、history 与 provider dispatch"]
+approved_deviation = ["LLM_* 单一模型接口", "保留无状态 Deps、lazy Agent 与 current_datetime"]
+verification = ["test_agent_and_logfire_generation_boundaries_follow_legacy_defaults", "test_agent_and_logfire_pass_real_chat_completions_contract"]
+
+[[target]]
+profile = "agent_logfire"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/agents/prompts.py"
+target = "app/agents/prompts.py"
+allowed_transformations = ["删除已移除工具 guidance", "增加单轮调用约束"]
+removed_references = ["ask-user、charts、code、RAG 与 deep research prompt"]
+approved_deviation = ["Personality、Answering、Output 原文保留，仅追加 single-turn 约束"]
+verification = ["test_agent_and_logfire_generation_boundaries_follow_legacy_defaults"]
+
+[[target]]
+profile = "agent_logfire"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/agents/utils.py"
+target = "app/agents/utils.py"
+allowed_transformations = ["删除未保留 helper"]
+removed_references = ["无"]
+approved_deviation = ["仅保留 current datetime helper"]
+verification = ["test_agent_and_logfire_pass_real_chat_completions_contract"]
+
+[[target]]
+profile = "agent_logfire"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/services/agent_invocation.py"
+target = "app/services/agent.py"
+allowed_transformations = ["删除 persistence、provider dispatch 与多轮 orchestration", "适配 JSON/SSE frame"]
+removed_references = ["database messages、conversation、billing、provider routing 与 channel adapters"]
+approved_deviation = ["最小 AgentInvocationService 只转换结果、事件与安全失败"]
+verification = ["test_agent_and_logfire_pass_real_chat_completions_contract"]
+
+[[target]]
+profile = "agent_logfire"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/api/routes/v1/agent.py"
+target = "app/api/agent.py"
+allowed_transformations = ["删除 WebSocket 与模型列表", "替换为单轮 JSON/SSE HTTP transport"]
+removed_references = ["WebSocket、AgentSession、conversation、query auth 与模型列表"]
+approved_deviation = ["POST /agent/run 与 POST /agent/stream 使用 deployment API Key"]
+verification = ["test_agent_and_logfire_pass_real_chat_completions_contract"]
+
+[[target]]
+profile = "agent_logfire"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/core/logfire_setup.py"
+target = "app/core/telemetry.py"
+allowed_transformations = ["删除非 Pydantic AI instrumentation", "增加默认内容采集禁用参数"]
+removed_references = ["FastAPI、database、Redis、Taskiq 与 HTTPX instrumentation"]
+approved_deviation = ["configure-first 后仅 instrument_pydantic_ai", "include_content 与 include_binary_content 均为 false"]
+verification = ["test_agent_and_logfire_pass_real_chat_completions_contract"]
+
+[[target]]
+profile = "agent_logfire"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/tests/test_agents.py"
+target = "tests/test_agent.py"
+allowed_transformations = ["删除 provider、history 与排除 tools tests", "替换 transport 为本地 Chat-compatible fake server"]
+removed_references = ["FunctionModel placeholder、configured-model tool、conversation 与 provider tests"]
+approved_deviation = ["真实 OpenAIChatModel HTTP 路径验证 JSON、SSE、auth、validation、failure 与 stateless"]
+verification = ["test_agent_and_logfire_pass_real_chat_completions_contract"]
+
+[[target]]
+profile = "agent_logfire"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/AGENTS.md"
+target = "AGENTS.md"
+allowed_transformations = ["backend 移至根目录", "删除 V1 排除 guidance", "增加批准的单轮 transport contract"]
+removed_references = ["frontend、用户/JWT、conversation、RAG 与替代 providers"]
+approved_deviation = ["记录 Agent JSON/SSE、LLM_* 与 content-safe Pydantic AI-only Logfire"]
+verification = ["test_agent_and_logfire_generation_boundaries_follow_legacy_defaults"]

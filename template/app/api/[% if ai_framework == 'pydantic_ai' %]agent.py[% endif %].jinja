@@ -7,10 +7,10 @@ from fastapi import APIRouter, Depends
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.api.deps import get_agent_service
+from app.api.deps import RequireApiKey, get_agent_service
 from app.services.agent import AgentInvocationService
 
-router = APIRouter(prefix="/agent", tags=["agent"])
+router = APIRouter(prefix="/agent", tags=["agent"], dependencies=[RequireApiKey])
 AgentServiceDep = Annotated[AgentInvocationService, Depends(get_agent_service)]
 
 

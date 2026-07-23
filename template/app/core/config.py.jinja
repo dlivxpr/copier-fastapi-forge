@@ -98,7 +98,7 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str = "https://api.example.com/v1"
     LLM_API_KEY: str = "model-key-CHANGEME"
     LLM_MODEL: str = "model-name-CHANGEME"
-[% endif %][% if enable_logfire %]
+[% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]
     LOGFIRE_TOKEN: str | None = None
     LOGFIRE_SERVICE_NAME: str = "[[ project_slug ]]"
     LOGFIRE_ENVIRONMENT: str = "development"

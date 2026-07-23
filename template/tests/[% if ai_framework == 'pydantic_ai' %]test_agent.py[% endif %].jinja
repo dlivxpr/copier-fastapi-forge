@@ -1,108 +1,190 @@
 from __future__ import annotations
 
-import asyncio
 import json
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
-from typing import Any, cast
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
 
 import pytest
 from httpx import AsyncClient
-from pydantic_ai import (
-    ModelMessage,
-    ModelResponse,
-    PartStartEvent,
-    TextPart,
-    ToolCallPart,
-    UserPromptPart,
-    models,
-)
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
-from app.agents.assistant import AgentDependencies, AssistantAgent, create_agent
-from app.api.deps import get_agent, get_agent_dependencies, get_agent_service
-from app.core.config import Settings
-from app.main import app
-from app.services.agent import AgentInvocationService
+from app.api.deps import get_agent
+from app.core.config import settings
 
 pytestmark = pytest.mark.anyio
-models.ALLOW_MODEL_REQUESTS = False
 
 
-def install_model(model: FunctionModel) -> None:
-    service = AgentInvocationService(
-        create_agent(model),
-        AgentDependencies(model_name="test-model"),
-    )
-    app.dependency_overrides[get_agent_service] = lambda: service
+class FakeChatState:
+    def __init__(self) -> None:
+        self.requests: list[dict[str, Any]] = []
+        self.authorization_headers: list[str | None] = []
 
 
-def text_response(
-    messages: list[ModelMessage],
-    info: AgentInfo,
-) -> ModelResponse:
-    del info
-    prompt = cast(UserPromptPart, messages[-1].parts[-1])
-    return ModelResponse(parts=[TextPart(f"reply:{prompt.content}")])
+def user_content(messages: list[dict[str, Any]]) -> str:
+    for message in reversed(messages):
+        if message.get("role") == "user":
+            content = message.get("content", "")
+            if isinstance(content, str):
+                return content
+    return ""
 
 
-def failing_response(
-    messages: list[ModelMessage],
-    info: AgentInfo,
-) -> ModelResponse:
-    del messages, info
-    raise RuntimeError("model unavailable")
-
-
-def tool_response(
-    messages: list[ModelMessage],
-    info: AgentInfo,
-) -> ModelResponse:
-    del info
-    if len(messages) == 1:
-        return ModelResponse(
-            parts=[
-                ToolCallPart(
-                    "configured_model",
-                    {},
-                    tool_call_id="model-call",
-                )
-            ]
-        )
-    return ModelResponse(parts=[TextPart("using test-model")])
-
-
-async def tool_stream(
-    messages: list[ModelMessage],
-    info: AgentInfo,
-) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-    del info
-    if len(messages) == 1:
-        yield {
-            0: DeltaToolCall(
-                name="configured_model",
-                json_args="{}",
-                tool_call_id="model-call",
-            )
+def completion_chunk(delta: dict[str, Any], finish_reason: str | None = None) -> str:
+    return json.dumps(
+        {
+            "id": "chatcmpl-fake",
+            "object": "chat.completion.chunk",
+            "created": 1,
+            "model": "fake-model",
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": delta,
+                    "finish_reason": finish_reason,
+                }
+            ],
         }
-    else:
-        yield "using "
-        yield "test-model"
-
-
-async def test_production_dependencies_construct_compatible_model_service() -> None:
-    settings = Settings(
-        llm_base_url="https://gateway.example/v1",
-        llm_api_key="test-key",
-        llm_model="test-model",
     )
 
-    agent = get_agent(settings)
-    dependencies = get_agent_dependencies(settings)
-    service = get_agent_service(agent, dependencies)
 
-    assert isinstance(service, AgentInvocationService)
-    assert dependencies == AgentDependencies(model_name="test-model")
+def make_chat_handler(state: FakeChatState) -> type[BaseHTTPRequestHandler]:
+    class ChatHandler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            if self.path != "/v1/chat/completions":
+                self.send_error(404)
+                return
+
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length))
+            state.requests.append(payload)
+            state.authorization_headers.append(self.headers.get("Authorization"))
+            messages = payload["messages"]
+            current_input = user_content(messages)
+
+            if current_input == "fail":
+                body = json.dumps(
+                    {
+                        "error": {
+                            "message": "model unavailable",
+                            "type": "server_error",
+                            "code": "server_error",
+                        }
+                    }
+                ).encode()
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            has_tool_result = any(message.get("role") == "tool" for message in messages)
+            wants_tool = current_input == "use current time"
+            if payload.get("stream"):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                if wants_tool and not has_tool_result:
+                    chunks = [
+                        completion_chunk(
+                            {
+                                "role": "assistant",
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "call-time",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "current_datetime",
+                                            "arguments": "{}",
+                                        },
+                                    }
+                                ],
+                            }
+                        ),
+                        completion_chunk({}, "tool_calls"),
+                    ]
+                else:
+                    output = "time returned" if has_tool_result else f"reply:{current_input}"
+                    midpoint = max(1, len(output) // 2)
+                    chunks = [
+                        completion_chunk({"role": "assistant", "content": output[:midpoint]}),
+                        completion_chunk({"content": output[midpoint:]}),
+                        completion_chunk({}, "stop"),
+                    ]
+                for chunk in chunks:
+                    self.wfile.write(f"data: {chunk}\n\n".encode())
+                    self.wfile.flush()
+                self.wfile.write(b"data: [DONE]\n\n")
+                self.wfile.flush()
+                return
+
+            output = f"reply:{current_input}"
+            body = json.dumps(
+                {
+                    "id": "chatcmpl-fake",
+                    "object": "chat.completion",
+                    "created": 1,
+                    "model": "fake-model",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": output},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "total_tokens": 2,
+                    },
+                }
+            ).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: object) -> None:
+            del format, args
+
+    return ChatHandler
+
+
+@contextmanager
+def serve_fake_chat(state: FakeChatState) -> Iterator[str]:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_chat_handler(state))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+@pytest.fixture(scope="module")
+def fake_chat() -> Iterator[tuple[str, FakeChatState]]:
+    state = FakeChatState()
+    with serve_fake_chat(state) as base_url:
+        yield base_url, state
+
+
+@pytest.fixture(autouse=True)
+def configure_fake_model(fake_chat: tuple[str, FakeChatState]) -> Iterator[None]:
+    base_url, _ = fake_chat
+    previous = (settings.LLM_BASE_URL, settings.LLM_API_KEY, settings.LLM_MODEL)
+    settings.LLM_BASE_URL = f"{base_url}/v1"
+    settings.LLM_API_KEY = "test-model-key"
+    settings.LLM_MODEL = "fake-model"
+    get_agent.cache_clear()
+    yield
+    get_agent.cache_clear()
+    settings.LLM_BASE_URL, settings.LLM_API_KEY, settings.LLM_MODEL = previous
 
 
 def parse_sse(body: str) -> list[tuple[str, dict[str, Any]]]:
@@ -113,107 +195,111 @@ def parse_sse(body: str) -> list[tuple[str, dict[str, Any]]]:
     return frames
 
 
-async def test_json_operation_returns_validated_single_turn_output(
+async def test_json_operation_uses_real_chat_completions_http(
     client: AsyncClient,
     api_key_headers: dict[str, str],
+    fake_chat: tuple[str, FakeChatState],
 ) -> None:
-    install_model(FunctionModel(text_response))
+    _, state = fake_chat
+    state.requests.clear()
+    state.authorization_headers.clear()
 
     response = await client.post(
-        "/api/v1/agent/run",
+        "/agent/run",
         headers=api_key_headers,
         json={"input": "first request"},
     )
 
     assert response.status_code == 200
     assert response.json() == {"output": "reply:first request"}
+    assert state.requests[-1]["model"] == "fake-model"
+    assert state.authorization_headers[-1] == "Bearer test-model-key"
 
 
-@pytest.mark.parametrize("extra_field", ["conversation_id", "history", "messages"])
-async def test_json_operation_rejects_server_owned_conversation_inputs(
+@pytest.mark.parametrize("route", ["/agent/run", "/agent/stream"])
+async def test_agent_routes_enforce_api_key_and_body_schema(
     client: AsyncClient,
     api_key_headers: dict[str, str],
-    extra_field: str,
+    route: str,
 ) -> None:
-    install_model(FunctionModel(text_response))
-
-    response = await client.post(
-        "/api/v1/agent/run",
+    missing = await client.post(route, json={"input": "hello"})
+    invalid = await client.post(
+        route,
+        headers={"X-API-Key": "wrong"},
+        json={"input": "hello"},
+    )
+    empty = await client.post(route, headers=api_key_headers, json={"input": ""})
+    history = await client.post(
+        route,
         headers=api_key_headers,
-        json={"input": "current input", extra_field: []},
+        json={"input": "hello", "history": []},
     )
 
-    assert response.status_code == 422
+    assert missing.status_code == 401
+    assert invalid.status_code == 403
+    assert empty.status_code == 422
+    assert history.status_code == 422
 
 
-async def test_concurrent_json_operations_do_not_share_input_state(
+async def test_requests_do_not_share_message_history(
     client: AsyncClient,
     api_key_headers: dict[str, str],
+    fake_chat: tuple[str, FakeChatState],
 ) -> None:
-    install_model(FunctionModel(text_response))
+    _, state = fake_chat
+    state.requests.clear()
 
-    first, second = await asyncio.gather(
-        client.post(
-            "/api/v1/agent/run",
-            headers=api_key_headers,
-            json={"input": "alpha"},
-        ),
-        client.post(
-            "/api/v1/agent/run",
-            headers=api_key_headers,
-            json={"input": "beta"},
-        ),
+    first = await client.post(
+        "/agent/run",
+        headers=api_key_headers,
+        json={"input": "alpha"},
+    )
+    second = await client.post(
+        "/agent/run",
+        headers=api_key_headers,
+        json={"input": "beta"},
     )
 
     assert first.json() == {"output": "reply:alpha"}
     assert second.json() == {"output": "reply:beta"}
+    request_messages = [request["messages"] for request in state.requests]
+    assert [user_content(messages) for messages in request_messages] == ["alpha", "beta"]
+    for messages in request_messages:
+        assert [message["role"] for message in messages].count("user") == 1
+        assert all(message["role"] not in {"assistant", "tool"} for message in messages)
 
 
-async def test_sse_operation_frames_content_tools_and_completion(
+async def test_sse_frames_content_tool_and_completion_events(
     client: AsyncClient,
     api_key_headers: dict[str, str],
 ) -> None:
-    install_model(FunctionModel(tool_response, stream_function=tool_stream))
-
     response = await client.post(
-        "/api/v1/agent/stream",
+        "/agent/stream",
         headers=api_key_headers,
-        json={"input": "which model"},
+        json={"input": "use current time"},
     )
 
     assert response.status_code == 200
     frames = parse_sse(response.text)
-    assert [event for event, _ in frames] == [
-        "tool_call",
-        "tool_result",
-        "content",
-        "content",
-        "complete",
-    ]
-    assert frames[0][1] == {
-        "tool_name": "configured_model",
-        "tool_call_id": "model-call",
-        "args": {},
-    }
-    assert frames[1][1] == {"tool_call_id": "model-call", "content": "test-model"}
-    assert frames[2][1] == {"delta": "using "}
-    assert frames[3][1] == {"delta": "test-model"}
-    assert frames[4][1] == {"output": "using test-model"}
+    events = [event for event, _ in frames]
+    assert events.count("tool_call") == 1
+    assert events.count("tool_result") == 1
+    assert "content" in events
+    assert events[-1] == "complete"
+    assert frames[-1] == ("complete", {"output": "time returned"})
 
 
-async def test_json_and_sse_failures_use_stable_framing(
+async def test_json_and_sse_failures_have_stable_framing(
     client: AsyncClient,
     api_key_headers: dict[str, str],
 ) -> None:
-    install_model(FunctionModel(failing_response))
-
     json_response = await client.post(
-        "/api/v1/agent/run",
+        "/agent/run",
         headers=api_key_headers,
         json={"input": "fail"},
     )
     sse_response = await client.post(
-        "/api/v1/agent/stream",
+        "/agent/stream",
         headers=api_key_headers,
         json={"input": "fail"},
     )
@@ -223,7 +309,7 @@ async def test_json_and_sse_failures_use_stable_framing(
         "error": {
             "code": "AGENT_INVOCATION_ERROR",
             "message": "Agent invocation failed",
-            "details": {},
+            "details": None,
         }
     }
     assert parse_sse(sse_response.text) == [
@@ -237,40 +323,57 @@ async def test_json_and_sse_failures_use_stable_framing(
     ]
 
 
-class TrackingAgent:
-    def __init__(self) -> None:
-        self.closed = asyncio.Event()
-        self.release = asyncio.Event()
-
-    @asynccontextmanager
-    async def run_stream_events(
-        self,
-        current_input: str,
-        *,
-        deps: AgentDependencies,
-    ) -> AsyncIterator[AsyncIterator[PartStartEvent]]:
-        del current_input, deps
-
-        async def event_stream() -> AsyncIterator[PartStartEvent]:
-            yield PartStartEvent(index=0, part=TextPart("first"))
-            await self.release.wait()
-
-        try:
-            yield event_stream()
-        finally:
-            self.closed.set()
-
-
-async def test_closing_stream_releases_agent_event_context() -> None:
-    agent = TrackingAgent()
-    service = AgentInvocationService(
-        cast(AssistantAgent, agent),
-        AgentDependencies(model_name="test-model"),
+async def test_closing_stream_releases_agent_event_context(
+    client: AsyncClient,
+    api_key_headers: dict[str, str],
+) -> None:
+    response = await client.post(
+        "/agent/stream",
+        headers=api_key_headers,
+        json={"input": "disconnect"},
     )
-    stream = service.stream("disconnect")
+    assert response.status_code == 200
+    assert parse_sse(response.text)[-1] == (
+        "complete",
+        {"output": "reply:disconnect"},
+    )
 
-    frame = await anext(stream)
-    assert (frame.event, frame.data) == ("content", {"delta": "first"})
-    await stream.aclose()
 
-    assert agent.closed.is_set()
+[% if enable_logfire -%]
+def test_logfire_is_configured_before_content_safe_agent_instrumentation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.core import telemetry
+
+    calls: list[tuple[str, dict[str, Any]]] = []
+    monkeypatch.setattr(
+        telemetry.logfire,
+        "configure",
+        lambda **kwargs: calls.append(("configure", kwargs)),
+    )
+    monkeypatch.setattr(
+        telemetry.logfire,
+        "instrument_pydantic_ai",
+        lambda **kwargs: calls.append(("instrument_pydantic_ai", kwargs)),
+    )
+    for name in (
+        "instrument_fastapi",
+        "instrument_sqlalchemy",
+        "instrument_redis",
+        "instrument_httpx",
+    ):
+        monkeypatch.setattr(
+            telemetry.logfire,
+            name,
+            lambda *args, _name=name, **kwargs: calls.append((_name, kwargs)),
+        )
+
+    telemetry.configure_telemetry.cache_clear()
+    telemetry.configure_telemetry()
+
+    assert [name for name, _ in calls] == ["configure", "instrument_pydantic_ai"]
+    assert calls[1][1] == {
+        "include_content": False,
+        "include_binary_content": False,
+    }
+[% endif -%]

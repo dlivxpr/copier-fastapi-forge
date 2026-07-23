@@ -14,8 +14,7 @@ from contextlib import asynccontextmanager
 [% if orm_type == "sqlmodel" %]from sqlmodel.ext.asyncio.session import AsyncSession
 [% endif %]
 from app.core.config import settings
-[% if enable_logfire %]from app.core.telemetry import instrument_database
-[% endif %]
+
 logger = logging.getLogger(__name__)
 
 engine = create_async_engine(
@@ -25,8 +24,6 @@ engine = create_async_engine(
     max_overflow=settings.DB_MAX_OVERFLOW,
     pool_timeout=settings.DB_POOL_TIMEOUT,
 )
-[% if enable_logfire %]instrument_database(engine)
-[% endif %]
 async_session_maker = async_sessionmaker(
     engine,
     class_=AsyncSession,
@@ -73,8 +70,7 @@ async def get_worker_db_context() -> AsyncGenerator[AsyncSession, None]:
         echo=False,
         poolclass=NullPool,
     )
-[% if enable_logfire %]    instrument_database(worker_engine)
-[% endif %]    factory = async_sessionmaker(
+    factory = async_sessionmaker(
         worker_engine,
         class_=AsyncSession,
         expire_on_commit=False,

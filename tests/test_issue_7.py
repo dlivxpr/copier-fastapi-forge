@@ -457,6 +457,11 @@ def test_migration_equivalence_manifest_rejects_unregistered_content(
             **base_profile,
             "background_tasks": "taskiq",
         },
+        "agent_logfire": {
+            **base_profile,
+            "ai_framework": "pydantic_ai",
+            "enable_logfire": True,
+        },
     }
 
     def manifest_key(record: dict[str, object]) -> str:
