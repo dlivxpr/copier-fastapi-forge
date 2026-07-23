@@ -20,10 +20,12 @@ dev = [
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
+norecursedirs = ["tests/fixtures/legacy-template"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py314"
+extend-exclude = ["tests/fixtures/legacy-template"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
@@ -31,4 +33,4 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
 [tool.ty.src]
 include = ["tests"]
-exclude = ["legacy", "template"]
+exclude = ["legacy", "template", "tests/fixtures/legacy-template"]

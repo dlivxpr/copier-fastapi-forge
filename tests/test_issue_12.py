@@ -23,6 +23,7 @@ from copier import run_copy
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 TEMPLATE_ROOT = Path(__file__).parents[1]
+LEGACY_FIXTURE_ROOT = TEMPLATE_ROOT / "tests" / "fixtures" / "legacy-template"
 INACTIVE = "<inactive>"
 
 
@@ -463,9 +464,7 @@ def _trace_authorization_digest(
 
 
 def _legacy_context(profile: dict[str, Any]) -> dict[str, Any]:
-    defaults = json.loads(
-        (TEMPLATE_ROOT / "legacy" / "template" / "cookiecutter.json").read_text(encoding="utf-8")
-    )
+    defaults = json.loads((LEGACY_FIXTURE_ROOT / "cookiecutter.json").read_text(encoding="utf-8"))
     defaults.update(profile)
     defaults.update(
         {
@@ -517,7 +516,7 @@ def test_each_pairwise_profile_has_protected_legacy_equivalence(
     }
     assert generated_union == sources_by_target.keys()
 
-    legacy_root = TEMPLATE_ROOT / "legacy" / "template" / "{{cookiecutter.project_slug}}"
+    legacy_root = LEGACY_FIXTURE_ROOT
     environment = Environment(
         loader=FileSystemLoader(legacy_root),
         undefined=StrictUndefined,
