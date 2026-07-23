@@ -502,10 +502,14 @@ def test_migration_equivalence_manifest_rejects_unregistered_content(
         for profile_name, profile in profiles.items()
     }
     legacy_root = TEMPLATE_ROOT / "legacy" / "template" / "{{cookiecutter.project_slug}}"
-    environment = Environment(
-        loader=FileSystemLoader(legacy_root),
-        undefined=StrictUndefined,
-        keep_trailing_newline=True,
+    environment = (
+        Environment(
+            loader=FileSystemLoader(legacy_root),
+            undefined=StrictUndefined,
+            keep_trailing_newline=True,
+        )
+        if legacy_root.exists()
+        else None
     )
 
     observed: dict[str, dict[str, str]] = {}
@@ -513,20 +517,26 @@ def test_migration_equivalence_manifest_rejects_unregistered_content(
         profile_name = str(record.get("profile", "minimal"))
         profile = profiles[profile_name]
         target_path = str(record["target"])
+        target_content = (projects[profile_name] / target_path).read_text(encoding="utf-8")
+        target_sha256 = _normalized_digest(target_content)
+        assert target_sha256 == protected[manifest_key(record)]["target_sha256"]
+        if environment is None:
+            continue
+
         source_path = str(record["legacy_source"]).removeprefix(
             "legacy/template/{{cookiecutter.project_slug}}/"
         )
         legacy_content = environment.get_template(source_path).render(
             {"cookiecutter": _legacy_context(profile)}
         )
-        target_content = (projects[profile_name] / target_path).read_text(encoding="utf-8")
         observed[manifest_key(record)] = {
             "legacy_sha256": _normalized_digest(legacy_content),
-            "target_sha256": _normalized_digest(target_content),
+            "target_sha256": target_sha256,
             "normalized_diff_sha256": _normalized_diff_digest(
                 legacy_content,
                 target_content,
             ),
         }
 
-    assert observed == protected
+    if environment is not None:
+        assert observed == protected

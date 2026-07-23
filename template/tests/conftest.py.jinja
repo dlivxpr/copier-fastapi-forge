@@ -11,6 +11,29 @@ def anyio_backend() -> str:
     return "asyncio"
 
 
+[% if enable_rate_limiting -%]
+@pytest.fixture(autouse=True)
+def clear_dependency_overrides() -> Iterator[None]:
+    from app.core.rate_limit import limiter
+    from app.main import app
+
+    limiter.enabled = False
+    yield
+    app.dependency_overrides.clear()
+    limiter.reset()
+    limiter.enabled = True
+
+
+@pytest.fixture
+def rate_limiter() -> Iterator[None]:
+    from app.core.rate_limit import limiter
+
+    limiter.enabled = True
+    yield
+    limiter.enabled = False
+
+
+[% else -%]
 @pytest.fixture(autouse=True)
 def clear_dependency_overrides() -> Iterator[None]:
     from app.main import app
@@ -19,6 +42,7 @@ def clear_dependency_overrides() -> Iterator[None]:
     app.dependency_overrides.clear()
 
 
+[% endif -%]
 @pytest.fixture
 async def client() -> AsyncIterator[AsyncClient]:
     from app.main import app

@@ -10,7 +10,7 @@ from app.main import app
 pytestmark = pytest.mark.anyio
 
 
-async def test_rate_limit_decorators_enforce_limits() -> None:
+async def test_rate_limit_decorators_enforce_limits(rate_limiter: None) -> None:
     @rate_limit_low("1/minute")
     async def limited(request: Request) -> str:
         return "ok"

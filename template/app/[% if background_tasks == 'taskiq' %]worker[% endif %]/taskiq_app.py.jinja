@@ -8,7 +8,10 @@ from taskiq_redis import ListQueueBroker, RedisAsyncResultBackend
 from app.core.config import settings
 [[ "\n" -]]
 result_backend = RedisAsyncResultBackend(redis_url=settings.TASKIQ_RESULT_BACKEND_URL)
-broker = ListQueueBroker(url=settings.TASKIQ_BROKER_URL).with_result_backend(result_backend)
+broker = ListQueueBroker(
+    url=settings.TASKIQ_BROKER_URL,
+    socket_timeout=None,
+).with_result_backend(result_backend)
 scheduler = TaskiqScheduler(broker=broker, sources=[LabelScheduleSource(broker)])
 
 

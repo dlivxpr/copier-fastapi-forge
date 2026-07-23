@@ -473,9 +473,9 @@ verification = ["test_issue_9_generation_boundaries"]
 profile = "taskiq"
 legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/worker/taskiq_app.py"
 target = "app/worker/taskiq_app.py"
-allowed_transformations = ["Copier 模板语法", "删除 legacy schedule import", "startup 与 shutdown 执行 Redis health"]
+allowed_transformations = ["Copier 模板语法", "删除 legacy schedule import", "startup 与 shutdown 执行 Redis health", "阻塞队列读取不设置 socket read timeout"]
 removed_references = ["RAG schedule 与虚构业务 task"]
-approved_deviation = ["生命周期 hooks 同时验证 broker 与 result backend，pool 关闭仍由 Taskiq owner 管理"]
+approved_deviation = ["生命周期 hooks 同时验证 broker 与 result backend，pool 关闭仍由 Taskiq owner 管理", "Taskiq BRPOP 保持无限等待，避免 redis-py 默认读取超时终止空闲 worker"]
 verification = ["test_taskiq_process_commands_start_and_stop_against_real_redis"]
 
 [[target]]
