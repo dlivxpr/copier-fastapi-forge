@@ -9,12 +9,12 @@ dependencies = []
 [dependency-groups]
 dev = [
     "copier>=9.10.2",
-    "httpx>=0.28.1",
+    "httpx2>=2.7.0",
     "jinja2>=3.1.6",
-    "pytest>=8.4.1",
-    "pytest-cov>=6.2.1",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
     "ruff>=0.12.4",
-    "ty>=0.0.1a16",
+    "ty>=0.0.62",
 ]
 
 [tool.pytest.ini_options]
