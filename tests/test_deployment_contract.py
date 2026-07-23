@@ -188,7 +188,7 @@ def test_external_nginx_and_generated_workflow_have_documented_structure(tmp_pat
     assert "refs/heads/master" in workflow["jobs"]["docker"]["if"]
     for marker in (
         "actions/checkout@v7",
-        "astral-sh/setup-uv@v9",
+        "astral-sh/setup-uv@v9.0.0",
         "coverage.xml",
         "--cov=cli",
         "--cov-fail-under=0",
