@@ -949,3 +949,156 @@ allowed_transformations = ["正文迁移为简体中文", "只保留无状态 Py
 removed_references = ["RAG、persona、用户支持与 AI_TEMPERATURE"]
 approved_deviation = ["增加 credential boundary 与 content-safe Logfire 指引"]
 verification = ["test_docs_and_omp_guidance_follow_generated_capabilities"]
+
+# Issue #12 root integration、package markers 与生成项目验收测试。
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/.gitignore"
+target = ".gitignore"
+allowed_transformations = ["删除 frontend 与排除能力 ignore 项", "生成项目根目录适配"]
+removed_references = ["frontend、Node、文件上传与删除部署资产"]
+approved_deviation = ["仅保留生成后端项目会产生的本地文件"]
+verification = ["test_each_pairwise_profile_has_protected_legacy_equivalence"]
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/pyproject.toml"
+target = ".python-version"
+allowed_transformations = ["backend 移至项目根", "Copier python_version 问题物化"]
+removed_references = ["frontend runtime version"]
+approved_deviation = ["使用 uv 识别的独立 .python-version 文件"]
+verification = ["test_each_pairwise_profile_has_protected_legacy_equivalence"]
+
+[[target]]
+profile = "postgresql_sqlalchemy_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/alembic.ini"
+target = "alembic.ini"
+allowed_transformations = ["backend 移至项目根", "删除身份相关 migration 配置"]
+removed_references = ["删除能力 migration 路径与命名"]
+approved_deviation = ["保留单一清理后 migration chain"]
+verification = ["test_both_orms_pass_real_postgresql_contract", "test_each_pairwise_profile_has_protected_legacy_equivalence"]
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/__init__.py"
+target = "app/__init__.py"
+allowed_transformations = ["backend 移至项目根", "Copier 变量语法"]
+removed_references = ["删除能力 package 引用"]
+approved_deviation = ["package docstring 使用生成项目名"]
+verification = ["test_named_profiles_cover_every_valid_capability_pair", "test_each_pairwise_profile_has_protected_legacy_equivalence"]
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/api/__init__.py"
+target = "app/api/__init__.py"
+allowed_transformations = ["backend 移至项目根", "删除排除 route 引用"]
+removed_references = ["用户、消息、文件、RAG 与 demo routes"]
+approved_deviation = ["仅保留 package marker"]
+verification = ["test_each_pairwise_profile_has_protected_legacy_equivalence"]
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/core/__init__.py"
+target = "app/core/__init__.py"
+allowed_transformations = ["backend 移至项目根", "删除排除 core 引用"]
+removed_references = ["删除能力 core utilities"]
+approved_deviation = ["仅保留 package marker"]
+verification = ["test_each_pairwise_profile_has_protected_legacy_equivalence"]
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/schemas/__init__.py"
+target = "app/schemas/__init__.py"
+allowed_transformations = ["backend 移至项目根", "删除排除 schema 引用"]
+removed_references = ["用户、分页、消息、文件与 RAG schemas"]
+approved_deviation = ["仅保留 package marker"]
+verification = ["test_each_pairwise_profile_has_protected_legacy_equivalence"]
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/services/__init__.py"
+target = "app/services/__init__.py"
+allowed_transformations = ["backend 移至项目根", "删除排除 service 引用"]
+removed_references = ["身份、消息、文件、Webhooks 与 RAG services"]
+approved_deviation = ["仅保留 package marker"]
+verification = ["test_each_pairwise_profile_has_protected_legacy_equivalence"]
+
+[[target]]
+profile = "taskiq"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/app/worker/__init__.py"
+target = "app/worker/__init__.py"
+allowed_transformations = ["backend 移至项目根", "仅在 Taskiq profile 生成"]
+removed_references = ["Celery、ARQ、demo tasks 与 schedule package"]
+approved_deviation = ["仅保留 Taskiq worker package marker"]
+verification = ["test_taskiq_process_commands_start_and_stop_against_real_redis", "test_each_pairwise_profile_has_protected_legacy_equivalence"]
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/cli/__init__.py"
+target = "cli/__init__.py"
+allowed_transformations = ["backend 移至项目根", "删除排除 CLI 引用"]
+removed_references = ["用户与删除能力 commands"]
+approved_deviation = ["仅保留 package marker"]
+verification = ["test_each_pairwise_profile_has_protected_legacy_equivalence"]
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/tests/__init__.py"
+target = "tests/__init__.py"
+allowed_transformations = ["backend 移至项目根", "Copier 变量语法"]
+removed_references = ["删除能力测试 package 引用"]
+approved_deviation = ["package docstring 使用生成项目名"]
+verification = ["test_named_profiles_cover_every_valid_capability_pair", "test_each_pairwise_profile_has_protected_legacy_equivalence"]
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/tests/conftest.py"
+target = "tests/conftest.py"
+allowed_transformations = ["backend 移至项目根", "删除排除 fixtures", "按保留能力条件化"]
+removed_references = ["用户、JWT、文件、消息、RAG 与删除数据库 fixtures"]
+approved_deviation = ["HTTPX lifespan client 与 rate limiter teardown 适配批准后的公开 seam"]
+verification = ["test_each_pairwise_profile_has_protected_legacy_equivalence"]
+
+[[target]]
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/tests/api/test_health.py"
+target = "tests/test_api.py"
+allowed_transformations = ["backend 移至项目根", "合并保留 health、API Key 与异常 contract"]
+removed_references = ["用户/JWT、分页与删除 routes"]
+approved_deviation = ["deployment API Key 与统一 failure envelope 在同一公开 HTTP seam 验收"]
+verification = ["test_minimal_project_passes_http_and_cli_runtime_contract", "test_each_pairwise_profile_has_protected_legacy_equivalence"]
+
+[[target]]
+profile = "redis_consumers"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/tests/test_core.py"
+target = "tests/test_cache.py"
+allowed_transformations = ["backend 移至项目根", "仅保留 FastAPICache 初始化 contract"]
+removed_references = ["cache demo endpoint 与删除能力 core tests"]
+approved_deviation = ["通过公开 cache backend 验证共享 Redis client"]
+verification = ["test_redis_consumers_pass_real_redis_contract", "test_each_pairwise_profile_has_protected_legacy_equivalence"]
+
+[[target]]
+profile = "postgresql_sqlalchemy_items"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/tests/test_repositories.py"
+target = "tests/test_items.py"
+allowed_transformations = ["backend 移至项目根", "删除 owner/user 引用", "仅保留 Item create/get/update/delete"]
+removed_references = ["用户 foreign key、分页与 Item list"]
+approved_deviation = ["通过批准后的 Item HTTP contract 验证双 ORM 分支"]
+verification = ["test_both_orms_pass_real_postgresql_contract", "test_each_pairwise_profile_has_protected_legacy_equivalence"]
+
+[[target]]
+profile = "redis_consumers"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/tests/test_core.py"
+target = "tests/test_rate_limit.py"
+allowed_transformations = ["backend 移至项目根", "保留 SlowAPI memory/Redis storage contract"]
+removed_references = ["/limited demo route 与删除能力 core tests"]
+approved_deviation = ["通过临时受保护 route 验证 429 failure envelope"]
+verification = ["test_redis_consumers_pass_real_redis_contract", "test_each_pairwise_profile_has_protected_legacy_equivalence"]
+
+[[target]]
+profile = "redis_consumers"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/tests/test_clients.py"
+target = "tests/test_redis.py"
+allowed_transformations = ["backend 移至项目根", "使用真实 Redis 替代内部 mock"]
+removed_references = ["未保留的 exists helper 与其他 clients"]
+approved_deviation = ["验证 connect、ping、get、set、delete 与 close lifecycle"]
+verification = ["test_redis_consumers_pass_real_redis_contract", "test_each_pairwise_profile_has_protected_legacy_equivalence"]
+
+[[target]]
+profile = "taskiq"
+legacy_source = "legacy/template/{{cookiecutter.project_slug}}/backend/tests/test_worker_taskiq.py"
+target = "tests/test_taskiq.py"
+allowed_transformations = ["backend 移至项目根", "删除 demo task discovery", "验证 broker/result/scheduler lifecycle"]
+removed_references = ["定时 health task 与业务 demo task"]
+approved_deviation = ["不为测试新增 task；只验证公开 worker 配置"]
+verification = ["test_taskiq_process_commands_start_and_stop_against_real_redis", "test_each_pairwise_profile_has_protected_legacy_equivalence"]

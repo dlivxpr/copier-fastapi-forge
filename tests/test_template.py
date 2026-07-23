@@ -249,7 +249,13 @@ def test_deployment_asset_switches_remove_whole_trees(tmp_path: Path) -> None:
     "data",
     [
         {"project_name": "Invalid-Name"},
+        {"project_slug": "Invalid-Slug"},
+        {"python_version": "3.11"},
         {"backend_port": 0},
+        {"backend_port": 65536},
+        {"database": "postgresql", "db_pool_size": 0},
+        {"database": "postgresql", "db_max_overflow": -1},
+        {"database": "postgresql", "db_pool_timeout": 0},
         {"enable_rate_limiting": True, "rate_limit_requests": 0},
         {"enable_rate_limiting": True, "rate_limit_period": 0},
         {"enable_redis": False, "enable_caching": True},
@@ -265,7 +271,7 @@ def test_invalid_public_answers_fail_before_rendering(
     data: dict[str, object],
 ) -> None:
     destination = tmp_path / "invalid"
-    with pytest.raises(ValueError, match="Validation error"):
+    with pytest.raises(ValueError, match=r"Validation error|Invalid choice"):
         render_project(destination, data)
     assert not destination.exists()
 

@@ -9,6 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
@@ -16,6 +18,12 @@ jobs:
       - run: uv sync --all-groups
       - name: Template static checks
         run: uv run python scripts/lint_template.py
+      - name: Migration goldens are append-only
+        if: github.event_name == 'pull_request'
+        run: uv run python scripts/check_migration_goldens.py ${{ github.event.pull_request.base.sha }}
+      - name: Migration goldens are append-only on push
+        if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
+        run: uv run python scripts/check_migration_goldens.py ${{ github.event.before }}
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run ty check
