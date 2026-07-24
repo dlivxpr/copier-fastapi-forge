@@ -3,13 +3,20 @@ from __future__ import annotations
 from redis.asyncio import Redis
 from taskiq import TaskiqEvents, TaskiqScheduler, TaskiqState
 from taskiq.schedule_sources import LabelScheduleSource
-from taskiq_redis import ListQueueBroker, RedisAsyncResultBackend
+from taskiq_redis import RedisAsyncResultBackend
 
 from app.core.config import settings
+from app.worker.redis_stream_broker import PendingAwareRedisStreamBroker
 [[ "\n" -]]
 result_backend = RedisAsyncResultBackend(redis_url=settings.TASKIQ_RESULT_BACKEND_URL)
-broker = ListQueueBroker(
+broker = PendingAwareRedisStreamBroker(
     url=settings.TASKIQ_BROKER_URL,
+    queue_name=settings.TASKIQ_STREAM_NAME,
+    consumer_group_name="taskiq",
+    consumer_id="0-0",
+    maxlen=settings.TASKIQ_STREAM_MAXLEN,
+    approximate=True,
+    idle_timeout=settings.TASKIQ_STREAM_IDLE_TIMEOUT_MS,
     socket_timeout=None,
 ).with_result_backend(result_backend)
 scheduler = TaskiqScheduler(broker=broker, sources=[LabelScheduleSource(broker)])

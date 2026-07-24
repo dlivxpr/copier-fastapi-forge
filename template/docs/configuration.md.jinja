@@ -38,7 +38,7 @@ uv run python -c "from app.core.config import settings; print(settings.PROJECT_N
 
 ## Taskiq
 
-`TASKIQ_BROKER_URL` 与 `TASKIQ_RESULT_BACKEND_URL` 独立配置。worker 与 scheduler process 不从 API lifespan 获取 connection。
+`TASKIQ_BROKER_URL` 与 `TASKIQ_RESULT_BACKEND_URL` 独立配置。`TASKIQ_STREAM_NAME` 默认为项目级 key；`TASKIQ_STREAM_MAXLEN` 控制近似保留容量；`TASKIQ_STREAM_IDLE_TIMEOUT_MS` 控制 pending task 接管等待时间。容量必须覆盖峰值积压与故障恢复窗口，idle timeout 必须大于正常 task 的最长预期执行时间。worker 与 scheduler process 不从 API lifespan 获取 connection。
 [% endif %][% if ai_framework == "pydantic_ai" %]
 
 ## Pydantic AI

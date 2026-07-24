@@ -37,7 +37,7 @@ uv run [[ project_slug ]] db current
 
 ## 添加 Taskiq task
 
-在业务所属模块使用 `broker.task` 定义 task；不要把示例 task 放进共享 worker bootstrap。通过 `uv run [[ project_slug ]] taskiq worker` 和 scheduler 运行真实 process。
+在业务所属模块使用 `broker.task` 定义幂等 task；不要把示例 task 放进共享 worker bootstrap。通过 `uv run [[ project_slug ]] taskiq worker` 和 scheduler 运行真实 process。worker loss 按容量边界内 at-least-once 处理，业务异常重试与 DLQ 需要显式设计。
 [% endif %][% if ai_framework == "pydantic_ai" %]
 
 ## 添加 Agent tool

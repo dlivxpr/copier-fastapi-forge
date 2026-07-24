@@ -17,7 +17,7 @@
 [% if enable_redis %]- `app/clients/redis.py`：API lifespan 拥有的 async Redis client；通过 `app.api.deps.Redis` 注入。
 [% endif %][% if enable_caching %]- `app/core/cache.py`：复用 API Redis client 的 FastAPICache backend。
 [% endif %][% if enable_rate_limiting %]- `app/core/rate_limit.py`：SlowAPI limiter 与 low/medium/high decorators。
-[% endif %][% if background_tasks == "taskiq" %]- `app/worker/taskiq_app.py`：独立 Taskiq broker、result backend 与 scheduler。
+[% endif %][% if background_tasks == "taskiq" %]- `app/worker/taskiq_app.py`：独立 Taskiq broker、result backend 与 scheduler；`app/worker/redis_stream_broker.py`：无新流量时也扫描并接管 idle pending task。
 [% endif %][% if ai_framework == "pydantic_ai" %]- `app/agents/assistant.py`：无请求间可变状态的单轮 Pydantic AI Agent；模型通过 OpenAI Chat Completions-compatible endpoint 调用。
 - `app/api/agent.py`：deployment API Key 保护的 `POST /agent/run` JSON 与 `POST /agent/stream` SSE transport。
 [% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]- `app/core/telemetry.py`：configure-first 的 Logfire Pydantic AI instrumentation；默认不采集 model 或 binary content。
@@ -51,7 +51,8 @@ uv run pytest
 [% if enable_redis %]- Redis client 必须由 API lifespan `connect()`/`close()`；readiness 通过注入的 client 执行 `ping()`。
 [% endif %][% if enable_caching %]- FastAPICache 与 Redis client 共享 binary connection；shutdown 时调用 `FastAPICache.reset()`。
 [% endif %][% if enable_rate_limiting %]- Rate limiting 使用 [[ "Redis shared storage" if rate_limit_storage == "redis" else "process-local memory storage" ]]；业务 route 按成本选择 `rate_limit_low`、`rate_limit_medium` 或 `rate_limit_high`。
-[% endif %][% if background_tasks == "taskiq" %]- Taskiq 只使用 `TASKIQ_BROKER_URL` 与 `TASKIQ_RESULT_BACKEND_URL`，不复用 API Redis client 生命周期。
+[% endif %][% if background_tasks == "taskiq" %]- Taskiq 使用独立 Redis Streams broker/result backend，不复用 API Redis client 生命周期；Stream 名、近似容量和 pending idle timeout 分别由 `TASKIQ_STREAM_NAME`、`TASKIQ_STREAM_MAXLEN` 与 `TASKIQ_STREAM_IDLE_TIMEOUT_MS` 配置。
+- worker loss 的投递语义是容量边界内 at-least-once；业务 task 必须幂等。task exception 自动重试和 DLQ 不由 broker 默认提供。
 - 使用 `uv run [[ project_slug ]] taskiq worker` 和 `uv run [[ project_slug ]] taskiq scheduler` 启动进程；业务 task 在调用方模块中通过 `broker.task` 定义。
 [% endif %][% if ai_framework == "pydantic_ai" %]- 每次 Agent 请求只使用当前 `input` 与当前 `Deps`；请求结束后不保留推理状态。
 - `LLM_BASE_URL`、`LLM_API_KEY` 和 `LLM_MODEL` 定义唯一兼容模型接口。

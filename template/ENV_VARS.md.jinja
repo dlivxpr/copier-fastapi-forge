@@ -45,8 +45,11 @@
 |---|---|---|
 | `TASKIQ_BROKER_URL` | `redis://localhost:6379/1` | broker URL |
 | `TASKIQ_RESULT_BACKEND_URL` | `redis://localhost:6379/1` | result backend URL |
+| `TASKIQ_STREAM_NAME` | `[[ project_slug ]]:taskiq` | 项目级 Redis Stream key |
+| `TASKIQ_STREAM_MAXLEN` | `100000` | 近似保留的最大 entry 数，必须覆盖峰值积压与故障恢复窗口 |
+| `TASKIQ_STREAM_IDLE_TIMEOUT_MS` | `3600000` | pending task 可被其他 worker 接管前的 idle 毫秒数 |
 
-Taskiq URL 独立于 API Redis lifecycle。
+Taskiq URL 独立于 API Redis lifecycle。Stream 在配置容量内提供 at-least-once worker-loss recovery；task 必须幂等。`TASKIQ_STREAM_MAXLEN` 是近似上限，容量不足可能裁剪未确认任务；`TASKIQ_STREAM_IDLE_TIMEOUT_MS` 必须大于正常 task 的最长预期执行时间。
 [% endif %][% if enable_rate_limiting %]
 
 ## Rate limiting

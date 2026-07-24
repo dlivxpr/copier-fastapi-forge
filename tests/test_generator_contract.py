@@ -159,8 +159,13 @@ def test_default_profile_has_documented_capability_boundary(tmp_path: Path) -> N
         (
             {"background_tasks": "none"},
             {"background_tasks": "taskiq"},
-            ("taskiq-redis>=", "ListQueueBroker", "TASKIQ_BROKER_URL="),
-            ("app/worker/taskiq_app.py",),
+            (
+                "taskiq-redis>=",
+                "RedisStreamBroker",
+                "TASKIQ_BROKER_URL=",
+                "TASKIQ_STREAM_NAME=",
+            ),
+            ("app/worker/taskiq_app.py", "app/worker/redis_stream_broker.py"),
         ),
         (
             {"enable_redis": False},

@@ -97,12 +97,14 @@ API lifespan 管理 Redis connection，`/health/ready` 会执行 `ping()`。
 
 ## Taskiq
 
-Taskiq 使用独立的 broker/result backend URL：
+Taskiq 使用独立的 Redis Streams broker 与 result backend URL。`TASKIQ_STREAM_NAME` 隔离项目，`TASKIQ_STREAM_MAXLEN` 限制近似保留长度，`TASKIQ_STREAM_IDLE_TIMEOUT_MS` 控制未确认任务的接管等待时间。
 
 ```bash
 uv run [[ project_slug ]] taskiq worker
 uv run [[ project_slug ]] taskiq scheduler
 ```
+
+投递语义是容量边界内 at-least-once：worker 在确认前失联时，任务可在 idle timeout 后重新交付，同一任务可能执行多次。所有 task 必须幂等；task exception 自动重试与 DLQ 需要业务显式配置。
 [% endif %][% if ai_framework == "pydantic_ai" %]
 
 ## Agent API

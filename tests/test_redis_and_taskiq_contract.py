@@ -32,7 +32,7 @@ def test_redis_consumers_and_taskiq_have_independent_generation_boundaries(
         "RedisClient",
         "FastAPICache",
         "SlowAPIASGIMiddleware",
-        "ListQueueBroker",
+        "RedisStreamBroker",
         "REDIS_HOST",
         "TASKIQ_BROKER_URL",
     ):
@@ -46,6 +46,8 @@ def test_redis_consumers_and_taskiq_have_independent_generation_boundaries(
     assert (taskiq.path / "app/worker/taskiq_app.py").is_file()
     assert not (taskiq.path / "app/clients/redis.py").exists()
     assert "TASKIQ_BROKER_URL" in taskiq_text
+    assert "RedisStreamBroker" in taskiq_text
+    assert "ListQueueBroker" not in taskiq_text
     assert "REDIS_HOST" not in taskiq_text
     assert "example_task" not in taskiq_text
     assert not (taskiq.path / "tests/test_tasks.py").exists()
@@ -65,6 +67,15 @@ def test_redis_consumers_and_taskiq_have_independent_generation_boundaries(
         "scheduler",
     ]
     assert "TASKIQ_RESULT_BACKEND_URL: redis://redis:6379/1" in taskiq.read("deploy/compose.yaml")
+    for service_name in ("app", "worker", "scheduler"):
+        service_environment = compose["services"][service_name]["environment"]
+        assert service_environment["TASKIQ_STREAM_NAME"] == (
+            "${TASKIQ_STREAM_NAME:-contract_service:taskiq}"
+        )
+        assert service_environment["TASKIQ_STREAM_MAXLEN"] == ("${TASKIQ_STREAM_MAXLEN:-100000}")
+        assert service_environment["TASKIQ_STREAM_IDLE_TIMEOUT_MS"] == (
+            "${TASKIQ_STREAM_IDLE_TIMEOUT_MS:-3600000}"
+        )
 
     memory = render_project(
         tmp_path / "memory",
@@ -156,6 +167,8 @@ def _smoke_taskiq_process(
     project_path: Path,
     environment: dict[str, str],
     command: list[str],
+    *,
+    completion_marker: Path | None = None,
 ) -> None:
     process = subprocess.Popen(
         command,
@@ -169,7 +182,7 @@ def _smoke_taskiq_process(
     )
     output = ""
     try:
-        deadline = time.monotonic() + 10
+        deadline = time.monotonic() + (20 if completion_marker is not None else 10)
         while time.monotonic() < deadline:
             if process.poll() is not None:
                 output = process.communicate(timeout=5)[0]
@@ -177,7 +190,13 @@ def _smoke_taskiq_process(
                     f"{' '.join(command)} exited during startup with "
                     f"{process.returncode}:\n{output}"
                 )
-            time.sleep(0.5)
+            if completion_marker is not None and completion_marker.exists():
+                time.sleep(0.5)
+                break
+            time.sleep(0.1 if completion_marker is not None else 0.5)
+        else:
+            if completion_marker is not None:
+                pytest.fail(f"{' '.join(command)} did not deliver {completion_marker}")
     finally:
         forced = False
         if process.poll() is None:
@@ -190,7 +209,7 @@ def _smoke_taskiq_process(
 
 
 @pytest.mark.service
-def test_taskiq_worker_and_scheduler_start_and_stop_against_real_redis(
+def test_taskiq_stream_delivery_recovery_and_process_lifecycle(
     tmp_path: Path,
     service_endpoints: ServiceEndpoints,
 ) -> None:
@@ -202,8 +221,129 @@ def test_taskiq_worker_and_scheduler_start_and_stop_against_real_redis(
     environment = _redis_environment(service_endpoints)
     project.sync()
     project.assert_run("uv", "run", "pytest", "-q", env=environment)
+
+    taskiq_app = project.path / "app/worker/taskiq_app.py"
+    taskiq_app.write_text(
+        taskiq_app.read_text(encoding="utf-8")
+        + textwrap.dedent(
+            """
+
+            from pathlib import Path
+
+
+            @broker.task
+            async def write_contract_marker(marker_path: str) -> None:
+                Path(marker_path).write_text("delivered", encoding="utf-8")
+            """
+        ),
+        encoding="utf-8",
+    )
+
     executable = f"{slug}.exe" if os.name == "nt" else slug
     cli = project.path / ".venv" / ("Scripts" if os.name == "nt" else "bin") / executable
     environment["PATH"] = f"{cli.parent}{os.pathsep}{os.environ['PATH']}"
-    for args in (("taskiq", "worker", "--workers=1"), ("taskiq", "scheduler")):
-        _smoke_taskiq_process(project.path, environment, [str(cli), *args])
+    worker_command = [str(cli), "taskiq", "worker", "--workers=1"]
+
+    prestart_marker = tmp_path / "prestart-delivered"
+    prestart_environment = {
+        **environment,
+        "TASKIQ_STREAM_NAME": f"{slug}:prestart",
+        "TASKIQ_STREAM_IDLE_TIMEOUT_MS": "100",
+    }
+    project.probe(
+        textwrap.dedent(
+            f"""
+            import anyio
+            from redis.asyncio import Redis
+
+            from app.core.config import settings
+            from app.worker.taskiq_app import broker, write_contract_marker
+
+
+            async def prepare() -> None:
+                client = Redis.from_url(settings.TASKIQ_BROKER_URL)
+                try:
+                    await client.delete(settings.TASKIQ_STREAM_NAME)
+                    await broker.startup()
+                    try:
+                        await write_contract_marker.kiq({str(prestart_marker)!r})
+                    finally:
+                        await broker.shutdown()
+                finally:
+                    await client.aclose()
+
+
+            anyio.run(prepare)
+            """
+        ),
+        env=prestart_environment,
+    )
+    _smoke_taskiq_process(
+        project.path,
+        prestart_environment,
+        worker_command,
+        completion_marker=prestart_marker,
+    )
+    assert prestart_marker.read_text(encoding="utf-8") == "delivered"
+
+    recovered_marker = tmp_path / "pending-recovered"
+    recovery_environment = {
+        **environment,
+        "TASKIQ_STREAM_NAME": f"{slug}:recovery",
+        "TASKIQ_STREAM_IDLE_TIMEOUT_MS": "100",
+    }
+    project.probe(
+        textwrap.dedent(
+            f"""
+            import anyio
+            from redis.asyncio import Redis
+
+            from app.core.config import settings
+            from app.worker.taskiq_app import broker, write_contract_marker
+
+
+            async def prepare() -> None:
+                client = Redis.from_url(settings.TASKIQ_BROKER_URL)
+                try:
+                    await client.delete(settings.TASKIQ_STREAM_NAME)
+                    await client.xgroup_create(
+                        settings.TASKIQ_STREAM_NAME,
+                        "taskiq",
+                        id="0-0",
+                        mkstream=True,
+                    )
+                    await broker.startup()
+                    try:
+                        await write_contract_marker.kiq({str(recovered_marker)!r})
+                        pending = await client.xreadgroup(
+                            "taskiq",
+                            "lost-worker",
+                            streams={{settings.TASKIQ_STREAM_NAME: ">"}},
+                            count=1,
+                        )
+                        assert len(pending) == 1
+                    finally:
+                        await broker.shutdown()
+                finally:
+                    await client.aclose()
+
+
+            anyio.run(prepare)
+            """
+        ),
+        env=recovery_environment,
+    )
+    time.sleep(0.2)
+    _smoke_taskiq_process(
+        project.path,
+        recovery_environment,
+        worker_command,
+        completion_marker=recovered_marker,
+    )
+    assert recovered_marker.read_text(encoding="utf-8") == "delivered"
+
+    _smoke_taskiq_process(
+        project.path,
+        environment,
+        [str(cli), "taskiq", "scheduler"],
+    )

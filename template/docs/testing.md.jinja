@@ -41,7 +41,7 @@ uv run pytest --cov=app --cov-report=xml
 
 ## Taskiq
 
-验证 broker/result backend/scheduler 初始化与关闭，不为测试向应用加入示例 task 或 route。
+使用真实 Redis 验证 worker 首次启动前已发布的 task、pending task 接管、result backend、scheduler 与 process shutdown。不为测试向应用加入示例 task、route 或 runtime fallback。
 [% endif %][% if ai_framework == "pydantic_ai" %]
 
 ## Agent

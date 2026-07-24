@@ -2,13 +2,22 @@ from __future__ import annotations
 
 import pytest
 from redis.asyncio import Redis
+from taskiq_redis import RedisStreamBroker
 
+from app.core.config import settings
 from app.worker.taskiq_app import broker, result_backend, scheduler
 
 pytestmark = pytest.mark.anyio
 
 
 async def test_taskiq_broker_scheduler_and_result_backend_use_real_redis() -> None:
+    assert isinstance(broker, RedisStreamBroker)
+    assert broker.queue_name == settings.TASKIQ_STREAM_NAME
+    assert broker.consumer_group_name == "taskiq"
+    assert broker.consumer_id == "0-0"
+    assert broker.maxlen == settings.TASKIQ_STREAM_MAXLEN
+    assert broker.approximate is True
+    assert broker.idle_timeout == settings.TASKIQ_STREAM_IDLE_TIMEOUT_MS
     await broker.startup()
     try:
         async with Redis(connection_pool=broker.connection_pool) as broker_redis:

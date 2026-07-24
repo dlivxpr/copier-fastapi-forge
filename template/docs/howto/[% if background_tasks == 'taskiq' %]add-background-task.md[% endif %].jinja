@@ -1,6 +1,6 @@
 # How-to：添加 Taskiq task
 
-Taskiq task 在独立 worker process 中运行。输入必须可序列化；resource dependency 必须在 worker process 内显式创建并关闭。
+Taskiq task 在独立 worker process 中运行。输入必须可序列化，task 必须幂等；resource dependency 必须在 worker process 内显式创建并关闭。
 
 ## 1. 定义 task
 
@@ -15,6 +15,8 @@ async def normalize_label(value: str) -> dict[str, str]:
 
 不要在 task 中复用 API lifespan 的 Redis client、database session 或 request state。
 
+Redis Streams 在配置容量内提供 at-least-once worker-loss recovery，同一 task 可能执行多次。task exception 自动重试与 DLQ 需要业务显式设计，不能依赖 broker 默认行为。
+
 ## 2. 调度 task
 
 从 service 显式调用：
@@ -23,7 +25,7 @@ async def normalize_label(value: str) -> dict[str, str]:
 task = await normalize_label.kiq("Example")
 ```
 
-需要 schedule 时使用 Taskiq label schedule，并保持 worker 与 scheduler 连接同一 `TASKIQ_BROKER_URL` 和 `TASKIQ_RESULT_BACKEND_URL`。
+需要 schedule 时使用 Taskiq label schedule，并保持 worker 与 scheduler 的 `TASKIQ_BROKER_URL`、`TASKIQ_RESULT_BACKEND_URL` 和 `TASKIQ_STREAM_NAME` 一致。`TASKIQ_STREAM_MAXLEN` 必须覆盖峰值积压与最长故障恢复窗口，`TASKIQ_STREAM_IDLE_TIMEOUT_MS` 必须大于正常 task 的最长预期执行时间。
 
 ## 3. 运行与验证
 
@@ -32,4 +34,4 @@ uv run [[ project_slug ]] taskiq worker
 uv run [[ project_slug ]] taskiq scheduler
 ```
 
-使用真实 Redis 验证 broker、result backend、task result 和 process shutdown；不要为测试添加 runtime fallback。
+使用真实 Redis 验证首次启动前投递、pending task 接管、result backend 和 process shutdown；不要为测试添加 runtime fallback。

@@ -13,6 +13,7 @@ Tool 应聚焦单一动作，明确输入、输出、失败条件和 side effect
 ```python
 from pydantic_ai import RunContext
 
+
 @agent.tool
 async def lookup_status(ctx: RunContext[Deps], resource_id: str) -> str:
     """Return the current status for one resource."""

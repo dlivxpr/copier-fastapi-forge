@@ -15,6 +15,9 @@ services:
       REDIS_PORT: "6379"
 [% endif %][% if background_tasks == "taskiq" %]      TASKIQ_BROKER_URL: redis://redis:6379/1
       TASKIQ_RESULT_BACKEND_URL: redis://redis:6379/1
+      TASKIQ_STREAM_NAME: "${TASKIQ_STREAM_NAME:-[[ project_slug ]]:taskiq}"
+      TASKIQ_STREAM_MAXLEN: "${TASKIQ_STREAM_MAXLEN:-100000}"
+      TASKIQ_STREAM_IDLE_TIMEOUT_MS: "${TASKIQ_STREAM_IDLE_TIMEOUT_MS:-3600000}"
 [% endif %][% if ai_framework == "pydantic_ai" %]      LLM_BASE_URL: "${LLM_BASE_URL:-https://api.example.com/v1}"
       LLM_API_KEY: "${LLM_API_KEY:-model-key-CHANGEME}"
       LLM_MODEL: "${LLM_MODEL:-model-name-CHANGEME}"
@@ -74,6 +77,9 @@ services:
     environment:
       TASKIQ_BROKER_URL: redis://redis:6379/1
       TASKIQ_RESULT_BACKEND_URL: redis://redis:6379/1
+      TASKIQ_STREAM_NAME: "${TASKIQ_STREAM_NAME:-[[ project_slug ]]:taskiq}"
+      TASKIQ_STREAM_MAXLEN: "${TASKIQ_STREAM_MAXLEN:-100000}"
+      TASKIQ_STREAM_IDLE_TIMEOUT_MS: "${TASKIQ_STREAM_IDLE_TIMEOUT_MS:-3600000}"
 [% if database == "postgresql" %]      POSTGRES_HOST: db
       POSTGRES_PORT: "5432"
       POSTGRES_USER: "${POSTGRES_USER:-postgres}"
@@ -99,6 +105,9 @@ services:
     environment:
       TASKIQ_BROKER_URL: redis://redis:6379/1
       TASKIQ_RESULT_BACKEND_URL: redis://redis:6379/1
+      TASKIQ_STREAM_NAME: "${TASKIQ_STREAM_NAME:-[[ project_slug ]]:taskiq}"
+      TASKIQ_STREAM_MAXLEN: "${TASKIQ_STREAM_MAXLEN:-100000}"
+      TASKIQ_STREAM_IDLE_TIMEOUT_MS: "${TASKIQ_STREAM_IDLE_TIMEOUT_MS:-3600000}"
 [% if database == "postgresql" %]      POSTGRES_HOST: db
       POSTGRES_PORT: "5432"
       POSTGRES_USER: "${POSTGRES_USER:-postgres}"

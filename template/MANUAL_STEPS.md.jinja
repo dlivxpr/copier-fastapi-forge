@@ -26,7 +26,8 @@ cp .env.example .env
 - [ ] 准备 Redis 8 instance，并限制公网访问。
 [% if enable_docker %]- [ ] 本地可执行 `docker compose -f deploy/compose.dev.yaml up -d redis`。
 [% endif %][% if enable_redis %]- [ ] 配置 `REDIS_HOST`、`REDIS_PORT`、`REDIS_PASSWORD` 和 `REDIS_DB`。
-[% endif %][% if background_tasks == "taskiq" %]- [ ] 配置 `TASKIQ_BROKER_URL` 与 `TASKIQ_RESULT_BACKEND_URL`。
+[% endif %][% if background_tasks == "taskiq" %]- [ ] 配置 `TASKIQ_BROKER_URL`、`TASKIQ_RESULT_BACKEND_URL`、`TASKIQ_STREAM_NAME`、`TASKIQ_STREAM_MAXLEN` 与 `TASKIQ_STREAM_IDLE_TIMEOUT_MS`。
+- [ ] 按峰值入队速率和最长故障恢复窗口校准 Stream 容量，并监控 Stream 长度、pending 数量和最老 pending 时长。
 [% endif %][% endif %][% if ai_framework == "pydantic_ai" %]
 
 ## 模型 endpoint

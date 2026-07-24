@@ -30,7 +30,7 @@ HTTP request → FastAPI route → service → repository → async database
 | `app/db/` | model、engine、session 与 transaction ownership |
 | `alembic/` | schema migration |
 [% endif %][% if ai_framework == "pydantic_ai" %]| `app/agents/` | 无请求间可变状态的 Agent 定义 |
-[% endif %][% if background_tasks == "taskiq" %]| `app/worker/` | Taskiq broker、result backend 与 scheduler |
+[% endif %][% if background_tasks == "taskiq" %]| `app/worker/` | Redis Streams broker、result backend 与 Taskiq scheduler |
 [% endif %]
 
 ## 层级规则
@@ -48,6 +48,6 @@ HTTP request → FastAPI route → service → repository → async database
 - 业务 API 由 deployment API Key dependency 统一保护。
 - Request ID 使用 `X-Request-ID` 贯穿 response 与日志。
 [% if enable_redis %]- Redis connection 由 API lifespan 持有。
-[% endif %][% if background_tasks == "taskiq" %]- Taskiq process 自己初始化 broker，不复用 API Redis client lifecycle。
+[% endif %][% if background_tasks == "taskiq" %]- Taskiq process 自己初始化 Redis Streams broker，不复用 API Redis client lifecycle；task 按容量边界内 at-least-once 设计并保持幂等。
 [% endif %][% if ai_framework == "pydantic_ai" %]- Agent dependency 由调用方构造；请求之间不共享可变推理状态。
 [% endif %]

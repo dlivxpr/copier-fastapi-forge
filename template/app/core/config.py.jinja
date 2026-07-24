@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import ValidationInfo, [% if database == "postgresql" or enable_redis %]computed_field, [% endif %]field_validator
+from pydantic import [% if background_tasks == "taskiq" %]PositiveInt, [% endif %]ValidationInfo, [% if database == "postgresql" or enable_redis %]computed_field, [% endif %]field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -75,6 +75,9 @@ class Settings(BaseSettings):
 [% if background_tasks == "taskiq" %]
     TASKIQ_BROKER_URL: str = "redis://localhost:6379/1"
     TASKIQ_RESULT_BACKEND_URL: str = "redis://localhost:6379/1"
+    TASKIQ_STREAM_NAME: str = "[[ project_slug ]]:taskiq"
+    TASKIQ_STREAM_MAXLEN: PositiveInt = 100_000
+    TASKIQ_STREAM_IDLE_TIMEOUT_MS: PositiveInt = 3_600_000
 [% endif %][% if enable_redis %]
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379

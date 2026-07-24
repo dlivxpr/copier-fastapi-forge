@@ -45,7 +45,7 @@ Copier 的 `--defaults`、`--data` 和 `--data-file` 对同一答案必须得到
 - 可选 PostgreSQL，启用时二选一使用 SQLAlchemy 或 SQLModel；
 - 可选 Item create/get/update/delete 示例，不提供 list endpoint；
 - 独立 Redis client、Redis cache、memory/Redis rate limiting；
-- 使用独立 broker/result backend 生命周期的 Taskiq worker 与 scheduler；
+- 使用独立 Redis Streams broker/result backend 生命周期的 Taskiq worker 与 scheduler；
 - 无请求间可变状态的单轮 Pydantic AI Agent；
 - 只 instrument Pydantic AI 且默认不采集模型内容的 Logfire；
 - Docker、三套 compose、外部 Nginx 和 GitHub Actions；
@@ -88,6 +88,8 @@ Frontend、用户/JWT、teams、billing、消息渠道、文件存储、Webhooks
 PostgreSQL 启用时增加 `db init`、`db migrate`、`db upgrade`、`db downgrade`、`db current` 和 `db history`。Taskiq 启用时增加 `taskiq worker` 与 `taskiq scheduler`。
 
 数据库、Redis 和 cache 资源由 API lifespan 显式初始化和关闭；Taskiq broker/result backend 由 worker process 独立拥有。真实集成必须能运行 migration、CRUD、commit/rollback、Redis 操作、rate limiting、worker/scheduler、Agent JSON/SSE 和资源 teardown。
+
+Taskiq 使用项目级命名的 Redis Stream、固定 consumer group，并从 `0-0` 创建新 group，确保 worker 首次启动前已发布的任务可被消费。`TASKIQ_STREAM_MAXLEN` 默认 `100000` 且使用近似裁剪；`TASKIQ_STREAM_IDLE_TIMEOUT_MS` 默认 `3600000`。在配置的积压容量与故障恢复窗口内，worker 确认前失联的任务按 at-least-once 重新交付，因此 task 必须幂等；超过容量边界时不承诺恢复。该保证不包含 task exception 自动重试、DLQ、exactly-once、旧 Redis List backlog 迁移或 List/Stream 兼容运行。
 
 ## 部署、CI 与 guidance
 
