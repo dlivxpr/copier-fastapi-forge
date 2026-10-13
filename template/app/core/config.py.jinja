@@ -1,0 +1,110 @@
+"""Application configuration using Pydantic BaseSettings."""
+
+from pathlib import Path
+from typing import Literal
+
+from pydantic import [% if background_tasks == "taskiq" %]PositiveInt, [% endif %]ValidationInfo, [% if database == "postgresql" or enable_redis %]computed_field, [% endif %]field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def find_env_file() -> Path | None:
+    """Find .env in the generated project root or its direct child."""
+    current = Path.cwd()
+    for path in (current, current.parent):
+        env_file = path / ".env"
+        if env_file.exists():
+            return env_file
+    return None
+
+
+class Settings(BaseSettings):
+    """Application settings."""
+
+    model_config = SettingsConfigDict(
+        env_file=find_env_file(),
+        env_ignore_empty=True,
+        extra="ignore",
+    )
+
+    PROJECT_NAME: str = "[[ project_name ]]"
+    API_V1_STR: str = "/api/v1"
+    DEBUG: bool = False
+    ENVIRONMENT: Literal["development", "local", "staging", "production"] = "local"
+    TIMEZONE: str = "[[ timezone ]]"
+    MAX_UPLOAD_SIZE_MB: int = 50
+[% if database == "postgresql" %]
+    DB_ECHO: bool = False
+    POSTGRES_HOST: str = "localhost"
+    POSTGRES_PORT: int = 5432
+    POSTGRES_USER: str = "postgres"
+    POSTGRES_PASSWORD: str = ""
+    POSTGRES_DB: str = "[[ project_slug ]]"
+    DB_POOL_SIZE: int = [[ db_pool_size ]]
+    DB_MAX_OVERFLOW: int = [[ db_max_overflow ]]
+    DB_POOL_TIMEOUT: int = [[ db_pool_timeout ]]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def DATABASE_URL(self) -> str:
+        return (
+            f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def DATABASE_URL_SYNC(self) -> str:
+        return (
+            f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
+[% endif %]
+    API_KEY: str = "[[ deployment_api_key ]]"
+    API_KEY_HEADER: str = "X-API-Key"
+
+    @field_validator("API_KEY")
+    @classmethod
+    def validate_api_key(cls, value: str, info: ValidationInfo) -> str:
+        environment = info.data.get("ENVIRONMENT", "local") if info.data else "local"
+        if value == "change-me-in-production" and environment == "production":
+            raise ValueError(
+                "API_KEY must be changed in production! "
+                "Generate a secure key with: openssl rand -hex 32"
+            )
+        return value
+[% if background_tasks == "taskiq" %]
+    TASKIQ_BROKER_URL: str = "redis://localhost:6379/1"
+    TASKIQ_RESULT_BACKEND_URL: str = "redis://localhost:6379/1"
+    TASKIQ_STREAM_NAME: str = "[[ project_slug ]]:taskiq"
+    TASKIQ_STREAM_MAXLEN: PositiveInt = 100_000
+    TASKIQ_STREAM_IDLE_TIMEOUT_MS: PositiveInt = 3_600_000
+[% endif %][% if enable_redis %]
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_PASSWORD: str | None = None
+    REDIS_DB: int = 0
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def REDIS_URL(self) -> str:
+        if self.REDIS_PASSWORD:
+            return (
+                f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:"
+                f"{self.REDIS_PORT}/{self.REDIS_DB}"
+            )
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+[% endif %][% if enable_rate_limiting %]
+    RATE_LIMIT_REQUESTS: int = [[ rate_limit_requests ]]
+    RATE_LIMIT_PERIOD: int = [[ rate_limit_period ]]
+    RATE_LIMIT_STORAGE: str = "[[ rate_limit_storage ]]"
+[% endif %][% if ai_framework == "pydantic_ai" %]
+    LLM_BASE_URL: str = "https://api.example.com/v1"
+    LLM_API_KEY: str = "model-key-CHANGEME"
+    LLM_MODEL: str = "model-name-CHANGEME"
+[% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]
+    LOGFIRE_TOKEN: str | None = None
+    LOGFIRE_SERVICE_NAME: str = "[[ project_slug ]]"
+    LOGFIRE_ENVIRONMENT: str = "development"
+[% endif %]
+
+settings = Settings()

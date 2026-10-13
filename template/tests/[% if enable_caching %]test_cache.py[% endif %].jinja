@@ -1,0 +1,23 @@
+from __future__ import annotations
+
+import pytest
+from fastapi_cache import FastAPICache
+from fastapi_cache.decorator import cache
+from httpx import AsyncClient
+
+pytestmark = pytest.mark.anyio
+
+
+async def test_fastapi_cache_uses_real_redis(client: AsyncClient) -> None:
+    calls = 0
+
+    @cache(expire=60)
+    async def load_value() -> str:
+        nonlocal calls
+        calls += 1
+        return "cached-value"
+
+    assert await load_value() == "cached-value"
+    assert await load_value() == "cached-value"
+    assert calls == 1
+    await FastAPICache.clear()

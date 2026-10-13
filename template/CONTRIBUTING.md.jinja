@@ -1,0 +1,57 @@
+# 参与 [[ project_name ]]
+
+## 开发环境
+
+```bash
+uv sync --all-groups
+cp .env.example .env
+uv run [[ project_slug ]] server run --reload
+```
+
+Windows PowerShell 可使用 `Copy-Item .env.example .env`。
+[% if database == "postgresql" %]
+
+启动 PostgreSQL 后执行：
+
+```bash
+uv run [[ project_slug ]] db upgrade
+```
+[% endif %][% if enable_docker %]
+
+也可使用开发编排：
+
+```bash
+docker compose -f deploy/compose.dev.yaml up --build
+```
+[% endif %]
+
+## 代码风格
+
+- Python 使用 4 空格、双引号和 100 字符行宽。
+- I/O、数据库、HTTP 与 lifecycle 使用 `async`。
+- route 只负责 HTTP contract；业务规则放在 service。
+[% if database == "postgresql" %]- route 不直接调用 repository；repository 只负责数据访问并使用 `flush()`/`refresh()`。
+- transaction 由 session manager 统一 `commit()`/`rollback()`。
+[% endif %]- dependency 使用 FastAPI DI 或显式参数传递。
+- 不记录 credential 或敏感 payload。
+
+## 测试与质量检查
+
+```bash
+uv run ruff check .
+uv run ruff format --check .
+uv run ty check
+uv run pytest
+```
+
+测试通过公开接口观察行为。HTTP 测试使用 HTTPX `AsyncClient` + `ASGITransport`，结束后清理 `app.dependency_overrides`。
+
+## Pull request 清单
+
+- [ ] 改动只覆盖一个明确 contract。
+- [ ] 新行为有可失败的公开 seam 验证。
+- [ ] Ruff、format、ty 与 pytest 均通过。
+- [ ] 环境变量、部署资产和文档与能力开关同步。
+- [ ] 未提交 `.env`、凭据、本地数据库、cache、dependency 或 build 产物。
+[% if enable_docker %]- [ ] 三套 compose 至少执行 `docker compose config`；镜像相关改动实际 build。
+[% endif %]

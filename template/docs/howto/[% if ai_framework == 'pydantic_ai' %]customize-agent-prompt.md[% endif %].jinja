@@ -1,0 +1,23 @@
+# How-to：定制 Agent prompt
+
+所有 system prompt 集中在 `app/agents/prompts.py`。保持 prompt 与 transport、model 配置和请求状态解耦。
+
+## 1. 修改默认 prompt
+
+```python
+DEFAULT_SYSTEM_PROMPT = """You are a concise service assistant.
+
+Return factual answers. State uncertainty explicitly.
+Never expose credentials or internal implementation details.
+"""
+```
+
+明确角色、允许的动作、输出约束和安全边界。避免把 API Key、token、内部 URL 或环境变量值写入 prompt。
+
+## 2. 保持运行时无状态
+
+`AssistantAgent` 可以共享不可变 prompt 和 model adapter，但请求级数据只放入当前 `Deps`。不要在 prompt helper、module collection 或 Agent instance 中累积请求内容。
+
+## 3. 验证
+
+使用真实 Chat Completions-compatible server 覆盖成功、拒绝、tool call 和错误响应。JSON 与 SSE 应产生相同的业务语义；默认 Logfire instrumentation 不采集 model 或 binary content。

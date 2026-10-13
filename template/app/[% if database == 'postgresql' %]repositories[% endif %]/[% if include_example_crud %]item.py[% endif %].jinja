@@ -1,0 +1,57 @@
+"""Item persistence operations."""
+
+from typing import Any
+from uuid import UUID
+
+[% if orm_type == "sqlalchemy" %]from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+[% else %]from sqlmodel import col, select
+from sqlmodel.ext.asyncio.session import AsyncSession
+[% endif %]
+from app.db.models.item import Item
+
+
+async def get_by_id(db: AsyncSession, item_id: UUID) -> Item | None:
+[% if orm_type == "sqlalchemy" %]    result = await db.execute(select(Item).where(Item.id == item_id))
+    return result.scalar_one_or_none()
+[% else %]    result = await db.exec(select(Item).where(col(Item.id) == item_id))
+    return result.one_or_none()
+[% endif %]
+
+async def create(
+    db: AsyncSession,
+    *,
+    name: str,
+    description: str | None = None,
+    is_published: bool = False,
+) -> Item:
+    item = Item(
+        name=name,
+        description=description,
+        is_published=is_published,
+    )
+    db.add(item)
+    await db.flush()
+    await db.refresh(item)
+    return item
+
+
+async def update(
+    db: AsyncSession,
+    *,
+    db_item: Item,
+    update_data: dict[str, Any],
+) -> Item:
+    for field, value in update_data.items():
+        setattr(db_item, field, value)
+    await db.flush()
+    await db.refresh(db_item)
+    return db_item
+
+
+async def delete(db: AsyncSession, item_id: UUID) -> Item | None:
+    item = await get_by_id(db, item_id)
+    if item is not None:
+        await db.delete(item)
+        await db.flush()
+    return item

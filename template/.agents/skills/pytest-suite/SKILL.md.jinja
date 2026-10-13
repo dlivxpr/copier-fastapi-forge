@@ -1,0 +1,15 @@
+---
+name: pytest-suite
+description: 为 FastAPI 公开 contract 添加或修复 pytest 测试时使用。
+---
+
+# Pytest suite
+
+1. 先确定公开 seam 与可观察结果。
+2. 写一个会对目标 regression 失败的最小测试。
+3. HTTP 使用 `AsyncClient` + `ASGITransport`；外部 resource 使用独立 fixture。
+4. 先运行目标 test，再实现最小修复。
+5. 清理 dependency override、database row、Redis key 与 process。
+6. 运行 `uv run pytest`、Ruff 与 ty。
+
+不要 mock 内部 service/repository 调用，也不要测试 source text 或 import 成功。

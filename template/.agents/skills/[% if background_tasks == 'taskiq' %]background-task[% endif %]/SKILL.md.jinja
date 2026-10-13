@@ -1,0 +1,13 @@
+---
+name: background-task
+description: 添加或修改 Taskiq task、worker 与 scheduler 行为时使用。
+---
+
+# Background task
+
+1. 在业务所属模块通过 `broker.task` 定义 task；bootstrap 只配置 broker/backend/scheduler。
+2. 输入必须可序列化，task 必须幂等；resource dependency 在 worker process 内显式创建和关闭。
+3. 使用独立 Redis Streams broker/result backend，不复用 API Redis client lifecycle；通过 `TASKIQ_STREAM_NAME`、`TASKIQ_STREAM_MAXLEN` 与 `TASKIQ_STREAM_IDLE_TIMEOUT_MS` 配置 Stream。
+4. worker loss 按容量边界内 at-least-once 处理；task exception 自动重试或 DLQ 必须由业务显式设计。
+5. 使用 `uv run [[ project_slug ]] taskiq worker` 与 `uv run [[ project_slug ]] taskiq scheduler` 运行。
+6. 使用真实 Redis 验证首次启动前投递、pending task 接管、result backend 与 process shutdown；不向模板加入示例 task 或测试 route。

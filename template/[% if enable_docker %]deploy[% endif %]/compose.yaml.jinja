@@ -1,0 +1,134 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: [[ project_slug ]]_backend:latest
+    environment:
+      API_KEY: "${API_KEY:-[[ deployment_api_key ]]}"
+[% if database == "postgresql" %]      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+      POSTGRES_DB: "${POSTGRES_DB:-[[ project_slug ]]}"
+[% endif %][% if enable_redis %]      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+[% endif %][% if background_tasks == "taskiq" %]      TASKIQ_BROKER_URL: redis://redis:6379/1
+      TASKIQ_RESULT_BACKEND_URL: redis://redis:6379/1
+      TASKIQ_STREAM_NAME: "${TASKIQ_STREAM_NAME:-[[ project_slug ]]:taskiq}"
+      TASKIQ_STREAM_MAXLEN: "${TASKIQ_STREAM_MAXLEN:-100000}"
+      TASKIQ_STREAM_IDLE_TIMEOUT_MS: "${TASKIQ_STREAM_IDLE_TIMEOUT_MS:-3600000}"
+[% endif %][% if ai_framework == "pydantic_ai" %]      LLM_BASE_URL: "${LLM_BASE_URL:-https://api.example.com/v1}"
+      LLM_API_KEY: "${LLM_API_KEY:-model-key-CHANGEME}"
+      LLM_MODEL: "${LLM_MODEL:-model-name-CHANGEME}"
+[% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]      LOGFIRE_TOKEN: "${LOGFIRE_TOKEN:-}"
+      LOGFIRE_SEND_TO_LOGFIRE: "${LOGFIRE_SEND_TO_LOGFIRE:-false}"
+[% endif %]    ports:
+      - "[[ backend_port ]]:[[ backend_port ]]"
+[% if database == "postgresql" or enable_redis or background_tasks == "taskiq" %]    depends_on:
+[% if database == "postgresql" %]      db:
+        condition: service_healthy
+[% endif %][% if enable_redis or background_tasks == "taskiq" %]      redis:
+        condition: service_healthy
+[% endif %][% endif %]    networks:
+      - backend
+    restart: unless-stopped
+[% if database == "postgresql" %]
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-[[ project_slug ]]}"
+      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-[[ project_slug ]]}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+[% endif %][% if enable_redis or background_tasks == "taskiq" %]
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+[% endif %][% if background_tasks == "taskiq" %]
+  worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: [[ project_slug ]]_backend:latest
+    command: ["python", "-m", "cli.commands", "taskiq", "worker"]
+    environment:
+      TASKIQ_BROKER_URL: redis://redis:6379/1
+      TASKIQ_RESULT_BACKEND_URL: redis://redis:6379/1
+      TASKIQ_STREAM_NAME: "${TASKIQ_STREAM_NAME:-[[ project_slug ]]:taskiq}"
+      TASKIQ_STREAM_MAXLEN: "${TASKIQ_STREAM_MAXLEN:-100000}"
+      TASKIQ_STREAM_IDLE_TIMEOUT_MS: "${TASKIQ_STREAM_IDLE_TIMEOUT_MS:-3600000}"
+[% if database == "postgresql" %]      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+      POSTGRES_DB: "${POSTGRES_DB:-[[ project_slug ]]}"
+[% endif %][% if enable_redis %]      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+[% endif %]    depends_on:
+      redis:
+        condition: service_healthy
+[% if database == "postgresql" %]      db:
+        condition: service_healthy
+[% endif %]    networks:
+      - backend
+    restart: unless-stopped
+
+  scheduler:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: [[ project_slug ]]_backend:latest
+    command: ["python", "-m", "cli.commands", "taskiq", "scheduler"]
+    environment:
+      TASKIQ_BROKER_URL: redis://redis:6379/1
+      TASKIQ_RESULT_BACKEND_URL: redis://redis:6379/1
+      TASKIQ_STREAM_NAME: "${TASKIQ_STREAM_NAME:-[[ project_slug ]]:taskiq}"
+      TASKIQ_STREAM_MAXLEN: "${TASKIQ_STREAM_MAXLEN:-100000}"
+      TASKIQ_STREAM_IDLE_TIMEOUT_MS: "${TASKIQ_STREAM_IDLE_TIMEOUT_MS:-3600000}"
+[% if database == "postgresql" %]      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+      POSTGRES_DB: "${POSTGRES_DB:-[[ project_slug ]]}"
+[% endif %][% if enable_redis %]      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+[% endif %]    depends_on:
+      redis:
+        condition: service_healthy
+[% if database == "postgresql" %]      db:
+        condition: service_healthy
+[% endif %]    networks:
+      - backend
+    restart: unless-stopped
+[% endif %]
+networks:
+  backend:
+    driver: bridge
+[% if database == "postgresql" or enable_redis or background_tasks == "taskiq" %]
+volumes:
+[% if database == "postgresql" %]  postgres_data:
+[% endif %][% if enable_redis or background_tasks == "taskiq" %]  redis_data:
+[% endif %][% endif %]

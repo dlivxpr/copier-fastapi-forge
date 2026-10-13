@@ -1,0 +1,16 @@
+"""Redis-backed response cache configuration."""
+
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.redis import RedisBackend
+
+from app.clients.redis import RedisClient
+
+
+def setup_cache(redis: RedisClient) -> None:
+    """Initialize FastAPICache with the API process Redis connection."""
+    FastAPICache.init(RedisBackend(redis.raw), prefix="[[ project_slug ]]:cache:")
+
+
+def close_cache() -> None:
+    """Release FastAPICache global state during application shutdown."""
+    FastAPICache.reset()

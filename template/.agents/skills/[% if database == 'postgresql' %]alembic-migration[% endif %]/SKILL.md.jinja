@@ -1,0 +1,15 @@
+---
+name: alembic-migration
+description: 修改 PostgreSQL model、生成或审查 Alembic migration 时使用。
+---
+
+# Alembic migration
+
+1. 修改 model 前确认 schema contract 与现有 naming convention。
+2. 运行 `uv run [[ project_slug ]] db migrate --message "describe change"`。
+3. 人工审查 upgrade/downgrade；autogenerate 结果不是事实来源。
+4. 在隔离 database 执行 `uv run [[ project_slug ]] db upgrade`。
+5. 运行 `uv run [[ project_slug ]] db current` 并验证受影响公开行为。
+6. 检查 downgrade 的数据风险；破坏性迁移必须先取得明确决策。
+
+repository transaction contract 不因 migration 改变：只使用 `flush()`/`refresh()`。

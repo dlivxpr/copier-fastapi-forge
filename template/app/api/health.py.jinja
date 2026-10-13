@@ -1,0 +1,87 @@
+"""Public health probes."""
+
+[% if database == "postgresql" or enable_redis %]from datetime import UTC, datetime
+[% endif -%]
+from typing import Any
+
+from fastapi import APIRouter
+from fastapi.responses import JSONResponse
+[% if database == "postgresql" %][% if orm_type == "sqlalchemy" %]from sqlalchemy import select
+[% else %]from sqlalchemy import literal
+from sqlmodel import select
+[% endif %][% endif %]
+[% if database == "postgresql" %]from app.api.deps import DBSession[% if enable_redis %], Redis[% endif %]
+[% elif enable_redis %]from app.api.deps import Redis
+[% endif %]from app.core.config import settings
+from app.schemas.base import HealthDetailResponse, HealthResponse
+from app.services.health import build_health_response
+
+router = APIRouter(tags=["health"])
+
+
+@router.get("/health", response_model=HealthResponse)
+async def health_check() -> dict[str, Any]:
+    return {
+        "status": "healthy",
+        "max_upload_size_mb": settings.MAX_UPLOAD_SIZE_MB,
+    }
+
+
+@router.get("/health/live", response_model=HealthDetailResponse)
+async def liveness_probe() -> dict[str, Any]:
+    return build_health_response(
+        status="alive",
+        details={
+            "version": getattr(settings, "VERSION", "1.0.0"),
+            "environment": settings.ENVIRONMENT,
+        },
+    )
+
+
+@router.get("/health/ready", response_model=None)
+[% if database == "postgresql" or enable_redis %]async def readiness_probe(
+[% if database == "postgresql" %]    db: DBSession,
+[% endif %][% if enable_redis %]    redis: Redis,
+[% endif %]) -> dict[str, Any] | JSONResponse:
+[% else %]async def readiness_probe() -> dict[str, Any] | JSONResponse:
+[% endif %]
+    checks: dict[str, dict[str, Any]] = {}
+[% if database == "postgresql" %]
+    try:
+        started_at = datetime.now(UTC)
+[% if orm_type == "sqlalchemy" %]        await db.execute(select(1))
+[% else %]        await db.exec(select(literal(1)))
+[% endif %]
+        latency_ms = (datetime.now(UTC) - started_at).total_seconds() * 1000
+        checks["database"] = {
+            "status": "healthy",
+            "latency_ms": round(latency_ms, 2),
+            "type": "postgresql",
+        }
+    except Exception as exc:
+        checks["database"] = {
+            "status": "unhealthy",
+            "error": str(exc),
+            "type": "postgresql",
+        }
+[% endif %][% if enable_redis %]
+    try:
+        started_at = datetime.now(UTC)
+        is_healthy = await redis.ping()
+        latency_ms = (datetime.now(UTC) - started_at).total_seconds() * 1000
+        checks["redis"] = (
+            {"status": "healthy", "latency_ms": round(latency_ms, 2)}
+            if is_healthy
+            else {"status": "unhealthy", "error": "Ping failed"}
+        )
+    except Exception as exc:
+        checks["redis"] = {"status": "unhealthy", "error": str(exc)}
+[% endif %]    all_healthy = all(check["status"] == "healthy" for check in checks.values())
+    response_data = build_health_response(
+        status="ready" if all_healthy else "not_ready",
+        checks=checks,
+    )
+    response_data.update(checks)
+    if not all_healthy:
+        return JSONResponse(status_code=503, content=response_data)
+    return response_data

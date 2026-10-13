@@ -1,0 +1,91 @@
+"""Application exceptions with HTTP status ownership."""
+
+from typing import Any
+
+
+class AppException(Exception):
+    """Base exception for errors exposed through the API envelope."""
+
+    message: str = "An error occurred"
+    code: str = "APP_ERROR"
+    status_code: int = 500
+
+    def __init__(
+        self,
+        message: str | None = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        self.message = message or self.__class__.message
+        self.code = code or self.__class__.code
+        self.details = details
+        super().__init__(self.message)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(message={self.message!r}, code={self.code!r})"
+
+
+class NotFoundError(AppException):
+    message = "Resource not found"
+    code = "NOT_FOUND"
+    status_code = 404
+
+
+class AlreadyExistsError(AppException):
+    message = "Resource already exists"
+    code = "ALREADY_EXISTS"
+    status_code = 409
+
+
+class ValidationError(AppException):
+    message = "Validation error"
+    code = "VALIDATION_ERROR"
+    status_code = 422
+
+
+class APIKeyMissingError(AppException):
+    message = "API Key header missing"
+    code = "AUTHENTICATION_ERROR"
+    status_code = 401
+
+
+class InvalidAPIKeyError(AppException):
+    message = "Invalid API Key"
+    code = "AUTHORIZATION_ERROR"
+    status_code = 403
+
+
+class BadRequestError(AppException):
+    message = "Bad request"
+    code = "BAD_REQUEST"
+    status_code = 400
+
+
+[% if enable_rate_limiting %]class RateLimitError(AppException):
+    message = "Rate limit exceeded"
+    code = "RATE_LIMIT_EXCEEDED"
+    status_code = 429
+
+
+[% endif %]class ExternalServiceError(AppException):
+    message = "External service unavailable"
+    code = "EXTERNAL_SERVICE_ERROR"
+    status_code = 503
+[% if ai_framework == "pydantic_ai" %]
+
+class AgentInvocationError(ExternalServiceError):
+    message = "Agent invocation failed"
+    code = "AGENT_INVOCATION_ERROR"
+    status_code = 502
+[% endif %]
+
+[% if database == "postgresql" %]class DatabaseError(AppException):
+    message = "Database error"
+    code = "DATABASE_ERROR"
+    status_code = 500
+
+
+[% endif %]class InternalError(AppException):
+    message = "Internal server error"
+    code = "INTERNAL_ERROR"
+    status_code = 500

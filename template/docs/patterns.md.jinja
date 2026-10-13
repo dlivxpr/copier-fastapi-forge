@@ -1,0 +1,48 @@
+# 代码模式
+
+## Dependency injection
+
+route 使用 `Annotated` alias 表达 dependency，避免在业务函数中读取全局 request state。测试通过 `app.dependency_overrides` 替换公开 dependency，并在结束后清理。
+
+## Service layer
+
+service 接收显式 dependency、执行业务校验并抛出 `AppException` 子类。不要用 `None` 或任意 dict 表达 domain failure。
+[% if database == "postgresql" %]
+
+## Repository layer
+
+repository 只执行数据库操作。写路径调用 `flush()`，需要数据库生成字段时调用 `refresh()`；不调用 `commit()` 或 `rollback()`。
+
+```python
+class WidgetRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def add(self, widget: Widget) -> Widget:
+        self._session.add(widget)
+        await self._session.flush()
+        await self._session.refresh(widget)
+        return widget
+```
+
+transaction 由 `get_db_session()` 的 context manager 统一拥有。
+[% endif %]
+
+## Exception handling
+
+异常类拥有稳定的 `code`、安全的 `message` 和 HTTP `status_code`。exception handler 负责 envelope，不在各 route 重复拼装错误响应。
+
+## Schema
+
+对可写资源分别定义 Create、Update 与 Response schema。Response 使用 `ConfigDict(from_attributes=True)` 从 model 转换；Update 字段按 PATCH contract 设为可选。
+[% if enable_redis %]
+
+## Redis resource ownership
+
+只通过 lifespan-owned `RedisClient` 与 dependency 使用 API Redis。调用方不自行创建未关闭的 connection。
+[% endif %][% if ai_framework == "pydantic_ai" %]
+
+## Agent dependency
+
+每次请求构造 `Deps` 并传给 agent run；tool 使用 `RunContext[Deps]`。不要把请求级数据写到 module、Agent instance 或共享 collection。
+[% endif %]

@@ -1,0 +1,42 @@
+from __future__ import annotations
+
+from redis.asyncio import Redis
+from taskiq import TaskiqEvents, TaskiqScheduler, TaskiqState
+from taskiq.schedule_sources import LabelScheduleSource
+from taskiq_redis import RedisAsyncResultBackend
+
+from app.core.config import settings
+from app.worker.redis_stream_broker import PendingAwareRedisStreamBroker
+[[ "\n" -]]
+result_backend = RedisAsyncResultBackend(redis_url=settings.TASKIQ_RESULT_BACKEND_URL)
+broker = PendingAwareRedisStreamBroker(
+    url=settings.TASKIQ_BROKER_URL,
+    queue_name=settings.TASKIQ_STREAM_NAME,
+    consumer_group_name="taskiq",
+    consumer_id="0-0",
+    maxlen=settings.TASKIQ_STREAM_MAXLEN,
+    approximate=True,
+    idle_timeout=settings.TASKIQ_STREAM_IDLE_TIMEOUT_MS,
+    socket_timeout=None,
+).with_result_backend(result_backend)
+scheduler = TaskiqScheduler(broker=broker, sources=[LabelScheduleSource(broker)])
+
+
+async def ping_redis_consumers() -> None:
+    """Fail when either Taskiq Redis consumer is unhealthy."""
+    async with Redis(connection_pool=broker.connection_pool) as broker_redis:
+        await broker_redis.ping()
+    async with Redis(connection_pool=result_backend.redis_pool) as result_redis:
+        await result_redis.ping()
+
+
+@broker.on_event(TaskiqEvents.CLIENT_STARTUP, TaskiqEvents.WORKER_STARTUP)
+async def startup(_state: TaskiqState) -> None:
+    """Validate Taskiq Redis connections."""
+    await ping_redis_consumers()
+
+
+@broker.on_event(TaskiqEvents.CLIENT_SHUTDOWN, TaskiqEvents.WORKER_SHUTDOWN)
+async def shutdown(_state: TaskiqState) -> None:
+    """Validate Redis before Taskiq closes its broker resources."""
+    await ping_redis_consumers()

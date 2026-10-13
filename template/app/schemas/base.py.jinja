@@ -1,0 +1,18 @@
+"""Shared response schemas."""
+
+from typing import Any
+
+from pydantic import BaseModel
+
+
+class HealthResponse(BaseModel):
+    status: str
+    max_upload_size_mb: int | None = None
+
+
+class HealthDetailResponse(BaseModel):
+    status: str
+    timestamp: str
+    service: str
+    checks: dict[str, Any] | None = None
+    details: dict[str, Any] | None = None

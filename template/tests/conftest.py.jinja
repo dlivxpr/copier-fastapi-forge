@@ -1,0 +1,63 @@
+from __future__ import annotations
+
+from collections.abc import AsyncIterator, Iterator
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+
+@pytest.fixture(scope="session")
+def anyio_backend() -> str:
+    return "asyncio"
+
+
+[% if enable_rate_limiting -%]
+@pytest.fixture(autouse=True)
+def clear_dependency_overrides() -> Iterator[None]:
+    from app.core.rate_limit import limiter
+    from app.main import app
+
+    limiter.enabled = False
+    yield
+    app.dependency_overrides.clear()
+    limiter.reset()
+    limiter.enabled = True
+
+
+@pytest.fixture
+def rate_limiter() -> Iterator[None]:
+    from app.core.rate_limit import limiter
+
+    limiter.enabled = True
+    yield
+    limiter.enabled = False
+
+
+[% else -%]
+@pytest.fixture(autouse=True)
+def clear_dependency_overrides() -> Iterator[None]:
+    from app.main import app
+
+    yield
+    app.dependency_overrides.clear()
+
+
+[% endif -%]
+@pytest.fixture
+async def client() -> AsyncIterator[AsyncClient]:
+    from app.main import app
+
+    async with app.router.lifespan_context(app):
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            yield client
+
+
+@pytest.fixture
+def valid_key() -> str:
+    return "[[ deployment_api_key ]]"
+
+
+@pytest.fixture
+def api_key_headers(valid_key: str) -> dict[str, str]:
+    return {"X-API-Key": valid_key}

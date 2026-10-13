@@ -1,0 +1,261 @@
+from __future__ import annotations
+
+import json
+import threading
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
+from unittest.mock import patch
+
+import anyio
+from app.api.deps import get_agent
+from app.core.config import settings
+from app.main import app
+from httpx import ASGITransport, AsyncClient
+
+
+class ChatState:
+    def __init__(self) -> None:
+        self.requests: list[dict[str, Any]] = []
+        self.authorization: list[str | None] = []
+
+
+def user_content(messages: list[dict[str, Any]]) -> str:
+    for message in reversed(messages):
+        if message.get("role") == "user" and isinstance(message.get("content"), str):
+            return message["content"]
+    return ""
+
+
+def chunk(delta: dict[str, Any], finish_reason: str | None = None) -> str:
+    return json.dumps(
+        {
+            "id": "chatcmpl-contract",
+            "object": "chat.completion.chunk",
+            "created": 1,
+            "model": "contract-model",
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
+        }
+    )
+
+
+def handler_for(state: ChatState) -> type[BaseHTTPRequestHandler]:
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            if self.path != "/v1/chat/completions":
+                self.send_error(404)
+                return
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length))
+            state.requests.append(payload)
+            state.authorization.append(self.headers.get("Authorization"))
+            current_input = user_content(payload["messages"])
+            if current_input == "fail":
+                body = json.dumps(
+                    {
+                        "error": {
+                            "message": "model unavailable",
+                            "type": "server_error",
+                            "code": "server_error",
+                        }
+                    }
+                ).encode()
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            has_tool_result = any(message.get("role") == "tool" for message in payload["messages"])
+            wants_tool = current_input == "use current time"
+            if payload.get("stream"):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                if wants_tool and not has_tool_result:
+                    chunks = [
+                        chunk(
+                            {
+                                "role": "assistant",
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "call-time",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "current_datetime",
+                                            "arguments": "{}",
+                                        },
+                                    }
+                                ],
+                            }
+                        ),
+                        chunk({}, "tool_calls"),
+                    ]
+                else:
+                    output = "time returned" if has_tool_result else f"reply:{current_input}"
+                    midpoint = max(1, len(output) // 2)
+                    chunks = [
+                        chunk({"role": "assistant", "content": output[:midpoint]}),
+                        chunk({"content": output[midpoint:]}),
+                        chunk({}, "stop"),
+                    ]
+                for value in chunks:
+                    self.wfile.write(f"data: {value}\n\n".encode())
+                    self.wfile.flush()
+                self.wfile.write(b"data: [DONE]\n\n")
+                self.wfile.flush()
+                return
+
+            output = f"reply:{current_input}"
+            body = json.dumps(
+                {
+                    "id": "chatcmpl-contract",
+                    "object": "chat.completion",
+                    "created": 1,
+                    "model": "contract-model",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": output},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "total_tokens": 2,
+                    },
+                }
+            ).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: object) -> None:
+            del format, args
+
+    return Handler
+
+
+@contextmanager
+def fake_chat(state: ChatState):
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler_for(state))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+def parse_sse(body: str) -> list[tuple[str, dict[str, Any]]]:
+    frames = []
+    for block in body.replace("\r\n", "\n").strip().split("\n\n"):
+        fields = dict(line.split(": ", 1) for line in block.splitlines())
+        frames.append((fields["event"], json.loads(fields["data"])))
+    return frames
+
+
+async def verify_http() -> None:
+    state = ChatState()
+    with fake_chat(state) as base_url:
+        settings.LLM_BASE_URL = f"{base_url}/v1"
+        settings.LLM_API_KEY = "contract-key"
+        settings.LLM_MODEL = "contract-model"
+        get_agent.cache_clear()
+        headers = {"X-API-Key": "change-me-in-production"}
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with app.router.lifespan_context(app):  # noqa: SIM117
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                first = await client.post("/agent/run", headers=headers, json={"input": "alpha"})
+                second = await client.post("/agent/run", headers=headers, json={"input": "beta"})
+                assert first.json() == {"output": "reply:alpha"}
+                assert second.json() == {"output": "reply:beta"}
+                assert state.authorization == ["Bearer contract-key", "Bearer contract-key"]
+                for request, expected in zip(state.requests, ("alpha", "beta"), strict=True):
+                    assert user_content(request["messages"]) == expected
+                    assert [m["role"] for m in request["messages"]].count("user") == 1
+                    assert all(m["role"] not in {"assistant", "tool"} for m in request["messages"])
+
+                for route in ("/agent/run", "/agent/stream"):
+                    assert (await client.post(route, json={"input": "hello"})).status_code == 401
+                    assert (
+                        await client.post(
+                            route, headers={"X-API-Key": "wrong"}, json={"input": "hello"}
+                        )
+                    ).status_code == 403
+                    assert (
+                        await client.post(route, headers=headers, json={"input": ""})
+                    ).status_code == 422
+                    assert (
+                        await client.post(
+                            route,
+                            headers=headers,
+                            json={"input": "hello", "history": []},
+                        )
+                    ).status_code == 422
+
+                stream = await client.post(
+                    "/agent/stream", headers=headers, json={"input": "use current time"}
+                )
+                frames = parse_sse(stream.text)
+                events = [event for event, _ in frames]
+                assert events.count("tool_call") == 1
+                assert events.count("tool_result") == 1
+                assert "content" in events
+                assert frames[-1] == ("complete", {"output": "time returned"})
+
+                failed_json = await client.post(
+                    "/agent/run", headers=headers, json={"input": "fail"}
+                )
+                failed_stream = await client.post(
+                    "/agent/stream", headers=headers, json={"input": "fail"}
+                )
+                assert failed_json.status_code == 502
+                assert failed_json.json()["error"] == {
+                    "code": "AGENT_INVOCATION_ERROR",
+                    "message": "Agent invocation failed",
+                    "details": None,
+                }
+                assert parse_sse(failed_stream.text) == [
+                    (
+                        "error",
+                        {
+                            "code": "AGENT_INVOCATION_ERROR",
+                            "message": "Agent invocation failed",
+                        },
+                    )
+                ]
+        get_agent.cache_clear()
+
+
+def verify_telemetry() -> None:
+    from app.core import telemetry
+
+    calls: list[tuple[str, dict[str, Any]]] = []
+    with (
+        patch.object(
+            telemetry.logfire,
+            "configure",
+            side_effect=lambda **kwargs: calls.append(("configure", kwargs)),
+        ),
+        patch.object(
+            telemetry.logfire,
+            "instrument_pydantic_ai",
+            side_effect=lambda **kwargs: calls.append(("instrument_pydantic_ai", kwargs)),
+        ),
+    ):
+        telemetry.configure_telemetry.cache_clear()
+        telemetry.configure_telemetry()
+    assert [name for name, _ in calls] == ["configure", "instrument_pydantic_ai"]
+    assert calls[1][1] == {"include_content": False, "include_binary_content": False}
+
+
+anyio.run(verify_http)
+verify_telemetry()

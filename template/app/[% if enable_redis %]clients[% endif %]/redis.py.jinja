@@ -1,0 +1,60 @@
+from __future__ import annotations
+
+from redis.asyncio import Redis
+
+from app.core.config import settings
+
+
+class RedisClient:
+    """Own one async Redis connection and expose string operations."""
+
+    def __init__(self, url: str | None = None) -> None:
+        self.url = url or settings.REDIS_URL
+        self.client: Redis | None = None
+
+    async def connect(self) -> None:
+        """Create the underlying binary Redis client."""
+        self.client = Redis.from_url(self.url, decode_responses=False)
+
+    async def close(self) -> None:
+        """Close the connection; repeated calls are safe."""
+        if self.client is not None:
+            await self.client.aclose()
+            self.client = None
+
+    @property
+    def raw(self) -> Redis:
+        """Return the binary client required by infrastructure consumers."""
+        if self.client is None:
+            raise RuntimeError("Redis client not connected")
+        return self.client
+
+    async def get(self, key: str) -> str | None:
+        """Read and UTF-8 decode a value."""
+        value = await self.raw.get(key)
+        if value is None:
+            return None
+        if isinstance(value, bytes):
+            return value.decode("utf-8")
+        return str(value)
+
+    async def set(self, key: str, value: str, ttl: int | None = None) -> None:
+        """Write a value with an optional TTL in seconds."""
+        await self.raw.set(key, value, ex=ttl)
+
+    async def delete(self, key: str) -> int:
+        """Delete a key and return the number of removed keys."""
+        return int(await self.raw.delete(key))
+
+    async def exists(self, key: str) -> bool:
+        """Return whether a key exists."""
+        return bool(await self.raw.exists(key))
+
+    async def ping(self) -> bool:
+        """Return Redis connectivity without raising transport errors."""
+        if self.client is None:
+            return False
+        try:
+            return bool(await self.client.ping())
+        except Exception:
+            return False
