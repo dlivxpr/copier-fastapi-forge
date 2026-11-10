@@ -17,6 +17,10 @@
 
 [% if enable_docker and reverse_proxy == "nginx_external" %]- `deploy/nginx.conf` 提供 HTTP→HTTPS、TLS、ACME challenge、security headers 与 forwarded headers。
 - TLS private key 只挂载到 Nginx 容器，不进入应用镜像。
+- 外部 Nginx 容器通过 `[[ project_slug ]]_prod_backend` 网络访问 `app` service；生产编排除 API 外不发布任何宿主端口，API 默认只绑定 `127.0.0.1`。
+- 远程压测需把 `BACKEND_BIND_HOST` 显式设为 `0.0.0.0`，并以防火墙或安全组限制来源地址，压测结束后收回。
+[% elif enable_docker %]- 在外部 load balancer 或 reverse proxy 终止 TLS，并向应用传递可信 forwarded headers。
+- 生产编排除 API 外不发布任何宿主端口，API 默认只绑定 `127.0.0.1`；远程压测需把 `BACKEND_BIND_HOST` 显式设为 `0.0.0.0` 并配合防火墙限制来源。
 [% else %]- 在外部 load balancer 或 reverse proxy 终止 TLS，并向应用传递可信 forwarded headers。
 [% endif %]
 
@@ -24,7 +28,7 @@
 
 - 对外错误保持 `{ "error": { "code", "message", "details" } }`，未处理异常不泄露内部 traceback。
 - 日志不得包含 API Key、token、password 或 secret。
-- 配置通过环境变量加载；`.env` 不得提交。
+- 配置通过环境变量加载；`.env` 不得提交。[% if enable_docker %]实际 `deploy/.env` 与 `deploy/.env.prod` 同样不得提交，且不进入镜像；仓库只保留对应 `.example` 模板。[% endif %]
 [% if database == "postgresql" %]- 数据库账号遵循最小权限；migration 账号与 runtime 账号可在生产环境分离。
 [% endif %][% if enable_redis or background_tasks == "taskiq" %]- Redis 不应直接暴露到公网；生产环境启用网络隔离和访问控制。
 [% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]- Logfire instrumentation 保持 `include_content=False` 与 `include_binary_content=False`。

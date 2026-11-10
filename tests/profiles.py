@@ -123,8 +123,8 @@ PROFILE_STATES: dict[str, dict[str, object]] = {
         "rate_limit_storage": "memory",
         "ai_framework": "pydantic_ai",
         "enable_logfire": False,
-        "enable_docker": True,
-        "reverse_proxy": "none",
+        "enable_docker": False,
+        "reverse_proxy": INACTIVE,
         "ci_type": "none",
     },
     "taskiq_memory_delivery": {
@@ -138,8 +138,8 @@ PROFILE_STATES: dict[str, dict[str, object]] = {
         "rate_limit_storage": "memory",
         "ai_framework": "none",
         "enable_logfire": INACTIVE,
-        "enable_docker": True,
-        "reverse_proxy": "none",
+        "enable_docker": False,
+        "reverse_proxy": INACTIVE,
         "ci_type": "github",
     },
     "sqlmodel_cache_no_rate_limit": {
@@ -157,15 +157,15 @@ PROFILE_STATES: dict[str, dict[str, object]] = {
         "reverse_proxy": INACTIVE,
         "ci_type": "github",
     },
-    "sqlalchemy_item_memory_nginx": {
+    "sqlalchemy_item_redis_nginx": {
         "database": "postgresql",
         "orm_type": "sqlalchemy",
         "include_example_crud": True,
         "background_tasks": "none",
-        "enable_redis": False,
+        "enable_redis": True,
         "enable_caching": False,
         "enable_rate_limiting": True,
-        "rate_limit_storage": "memory",
+        "rate_limit_storage": "redis",
         "ai_framework": "none",
         "enable_logfire": INACTIVE,
         "enable_docker": True,
@@ -243,6 +243,36 @@ PROFILE_STATES: dict[str, dict[str, object]] = {
         "rate_limit_storage": "memory",
         "ai_framework": "pydantic_ai",
         "enable_logfire": True,
+        "enable_docker": False,
+        "reverse_proxy": INACTIVE,
+        "ci_type": "none",
+    },
+    "taskiq_redis_delivery": {
+        "database": "none",
+        "orm_type": INACTIVE,
+        "include_example_crud": INACTIVE,
+        "background_tasks": "taskiq",
+        "enable_redis": True,
+        "enable_caching": False,
+        "enable_rate_limiting": True,
+        "rate_limit_storage": "redis",
+        "ai_framework": "none",
+        "enable_logfire": INACTIVE,
+        "enable_docker": True,
+        "reverse_proxy": "none",
+        "ci_type": "github",
+    },
+    "sqlmodel_item_agent_redis": {
+        "database": "postgresql",
+        "orm_type": "sqlmodel",
+        "include_example_crud": True,
+        "background_tasks": "none",
+        "enable_redis": True,
+        "enable_caching": False,
+        "enable_rate_limiting": True,
+        "rate_limit_storage": "redis",
+        "ai_framework": "pydantic_ai",
+        "enable_logfire": True,
         "enable_docker": True,
         "reverse_proxy": "none",
         "ci_type": "none",
@@ -273,6 +303,12 @@ def is_valid_state(state: dict[str, object]) -> bool:
             state["rate_limit_storage"] == INACTIVE
             or (state["rate_limit_storage"] == "redis" and not state["enable_redis"])
         )
+    ):
+        return False
+    if (
+        state["enable_docker"]
+        and state["enable_rate_limiting"]
+        and state["rate_limit_storage"] != "redis"
     ):
         return False
     if state["ai_framework"] == "none":

@@ -30,6 +30,8 @@ build/
 *.egg-info/
 
 .env*
+deploy/.env
+deploy/.env.prod
 *.db
 *.sqlite
 

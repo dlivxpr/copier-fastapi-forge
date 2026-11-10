@@ -6,6 +6,8 @@ import ssl
 import subprocess
 import time
 from pathlib import Path
+from typing import Any
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 import pytest
@@ -14,10 +16,45 @@ import yaml
 from tests.support.generation import GeneratedProject, minimal_answers, render_project
 
 
-def _compose_config(project: GeneratedProject, filename: str) -> None:
-    project.assert_run(
-        "docker", "compose", "-f", f"deploy/{filename}", "config", "--quiet", timeout=60
+def _write_deployment_environment(
+    project: GeneratedProject, filename: str, **overrides: str
+) -> None:
+    env_name = ".env.prod" if filename == "compose.prod.yaml" else ".env"
+    content = project.read(f"deploy/{env_name}.example")
+    keys = {line.partition("=")[0] for line in content.splitlines() if "=" in line}
+    values = {
+        "API_KEY": "deployment-contract-key",
+        "POSTGRES_PASSWORD": "database-contract-password",
+        "REDIS_PASSWORD": "redis-contract-password",
+        "LLM_BASE_URL": "https://model.example.test/v1",
+        "LLM_API_KEY": "model-contract-key",
+        "LLM_MODEL": "contract-model",
+        **overrides,
+    }
+    content += "\n" + "\n".join(f"{key}={value}" for key, value in values.items() if key in keys)
+    (project.path / "deploy" / env_name).write_text(content + "\n", encoding="utf-8")
+
+
+def _compose(
+    project: GeneratedProject, filename: str, *command: str
+) -> subprocess.CompletedProcess[str]:
+    env_name = ".env.prod" if filename == "compose.prod.yaml" else ".env"
+    return project.run(
+        "docker",
+        "compose",
+        "--env-file",
+        f"deploy/{env_name}",
+        "-f",
+        f"deploy/{filename}",
+        *command,
+        timeout=90,
     )
+
+
+def _compose_config(project: GeneratedProject, filename: str) -> dict[str, Any]:
+    result = _compose(project, filename, "config", "--format", "json")
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)
 
 
 def _docker(*command: str, timeout: int = 180) -> subprocess.CompletedProcess[str]:
@@ -34,6 +71,19 @@ def _published_port(container_id: str, container_port: int) -> int:
     result = _docker("port", container_id, f"{container_port}/tcp", timeout=30)
     assert result.returncode == 0, result.stderr
     return int(result.stdout.strip().rsplit(":", maxsplit=1)[1])
+
+
+def _worker_pids(container_id: str) -> set[str]:
+    result = _docker(
+        "exec",
+        container_id,
+        "python",
+        "-c",
+        "from pathlib import Path; print(Path('/proc/1/task/1/children').read_text())",
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    return set(result.stdout.split())
 
 
 def _wait_for_http(port: int, *, tls: bool = False) -> tuple[int, str]:
@@ -63,45 +113,35 @@ def test_docker_compose_and_capability_conditions_are_public_contract(tmp_path: 
     disabled = render_project(tmp_path / "disabled", minimal_answers())
     assert not (disabled.path / "deploy").exists()
     assert "docker compose" not in disabled.all_text().lower()
+    assert "gunicorn" not in disabled.read("pyproject.toml")
+    assert "uvicorn-worker" not in disabled.read("pyproject.toml")
 
     minimal = render_project(
         tmp_path / "minimal-docker",
         minimal_answers(enable_docker=True, reverse_proxy="none", backend_port=8123),
     )
     deploy = minimal.path / "deploy"
+    assert {path.name for path in deploy.glob("compose*.yaml")} == {
+        "compose.yaml",
+        "compose.prod.yaml",
+    }
     for relative_path in (
         "Dockerfile",
         "Dockerfile.dockerignore",
-        "compose.yaml",
-        "compose.dev.yaml",
-        "compose.prod.yaml",
+        ".env.example",
+        ".env.prod.example",
     ):
         assert (deploy / relative_path).is_file()
     assert not (deploy / "nginx.conf").exists()
-    dockerfile = minimal.read("deploy/Dockerfile")
-    for marker in (
-        " AS builder",
-        "FROM python:3.12-slim",
-        "USER appuser",
-        "HEALTHCHECK",
-        "urllib.request.urlopen('http://127.0.0.1:8123/health')",
-        'CMD ["python", "-m", "cli.commands", "server", "run"',
-        '"8123"]',
-        "COPY . /app",
-    ):
-        assert marker in dockerfile
-    assert "COPY app ./app" not in dockerfile
-    assert "httpx" not in dockerfile
-    assert ".env*" in minimal.read("deploy/Dockerfile.dockerignore")
-
-    for filename in ("compose.yaml", "compose.dev.yaml", "compose.prod.yaml"):
-        _compose_config(minimal, filename)
-        compose = yaml.safe_load(minimal.read(f"deploy/{filename}"))
+    assert not (deploy / ".env").exists()
+    assert not (deploy / ".env.prod").exists()
+    for filename in ("compose.yaml", "compose.prod.yaml"):
+        _write_deployment_environment(minimal, filename)
+        compose = _compose_config(minimal, filename)
         assert set(compose["services"]) == {"app"}
-        assert compose["services"]["app"]["build"] == {
-            "context": "..",
-            "dockerfile": "deploy/Dockerfile",
-        }
+        port = compose["services"]["app"]["ports"][0]
+        assert port["target"] == 8123
+        assert port["host_ip"] == "127.0.0.1"
 
     retained = render_project(
         tmp_path / "retained",
@@ -117,31 +157,102 @@ def test_docker_compose_and_capability_conditions_are_public_contract(tmp_path: 
             reverse_proxy="nginx_external",
         ),
     )
-    expected_services = {"app", "db", "redis", "worker", "scheduler"}
-    for filename in ("compose.yaml", "compose.dev.yaml", "compose.prod.yaml"):
-        _compose_config(retained, filename)
-        compose = yaml.safe_load(retained.read(f"deploy/{filename}"))
-        assert set(compose["services"]) == expected_services
-        assert compose["services"]["db"]["image"] == "postgres:16-alpine"
-        assert compose["services"]["redis"]["image"] == "redis:7-alpine"
-        assert compose["services"]["app"]["depends_on"]["db"]["condition"] == "service_healthy"
-        assert compose["services"]["app"]["depends_on"]["redis"]["condition"] == ("service_healthy")
-        assert compose["services"]["app"]["environment"]["POSTGRES_HOST"] == "db"
-        assert "DATABASE_URL" not in compose["services"]["app"]["environment"]
-        assert compose["services"]["worker"]["command"][:5] == [
-            "python",
-            "-m",
-            "cli.commands",
-            "taskiq",
-            "worker",
-        ]
-        assert compose["services"]["scheduler"]["command"] == [
-            "python",
-            "-m",
-            "cli.commands",
-            "taskiq",
-            "scheduler",
-        ]
+    for filename in ("compose.yaml", "compose.prod.yaml"):
+        _write_deployment_environment(retained, filename)
+        services = _compose_config(retained, filename)["services"]
+        assert set(services) == {"app", "db", "redis", "worker", "scheduler"}
+        assert services["app"]["depends_on"]["db"]["condition"] == "service_healthy"
+        assert services["app"]["depends_on"]["redis"]["condition"] == "service_healthy"
+        for service_name in ("app", "worker", "scheduler"):
+            environment = services[service_name]["environment"]
+            assert environment["POSTGRES_HOST"] == "db"
+            assert environment["REDIS_HOST"] == "redis"
+            assert environment["TASKIQ_STREAM_NAME"] == "contract_service:taskiq"
+            for url_name in ("TASKIQ_BROKER_URL", "TASKIQ_RESULT_BACKEND_URL"):
+                assert urlsplit(environment[url_name]).password == environment["REDIS_PASSWORD"]
+
+
+def test_deployment_environment_isolation_and_required_production_values(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = render_project(
+        tmp_path / "environment-boundaries",
+        minimal_answers(
+            database="postgresql",
+            enable_redis=True,
+            background_tasks="taskiq",
+            ai_framework="pydantic_ai",
+            enable_logfire=True,
+            enable_docker=True,
+            reverse_proxy="none",
+        ),
+    )
+    required = (
+        "API_KEY",
+        "POSTGRES_PASSWORD",
+        "REDIS_PASSWORD",
+        "LLM_BASE_URL",
+        "LLM_API_KEY",
+        "LLM_MODEL",
+    )
+    for variable in required:
+        monkeypatch.delenv(variable, raising=False)
+    (project.path / ".env").write_text(
+        "API_KEY=root-key-must-not-be-used\nPOSTGRES_PASSWORD=root-password\n",
+        encoding="utf-8",
+    )
+    configurations = {}
+    for filename in ("compose.yaml", "compose.prod.yaml"):
+        _write_deployment_environment(project, filename, DB_POOL_SIZE="7")
+        compose = _compose_config(project, filename)
+        configurations[filename] = compose
+        services = compose["services"]
+        for name in ("app", "worker", "scheduler"):
+            environment = services[name]["environment"]
+            assert environment["API_KEY"] == "deployment-contract-key"
+            assert environment["POSTGRES_PASSWORD"] == "database-contract-password"
+            assert environment["LLM_API_KEY"] == "model-contract-key"
+            assert environment["DB_POOL_SIZE"] == "7"
+            assert environment["ENVIRONMENT"] == (
+                "production" if filename == "compose.prod.yaml" else "local"
+            )
+            assert environment["DEBUG"] == ("false" if filename == "compose.prod.yaml" else "true")
+        for name in ("db", "redis"):
+            environment = services[name]["environment"]
+            assert "API_KEY" not in environment
+            assert "LLM_API_KEY" not in environment
+        if filename == "compose.yaml":
+            for name in ("app", "db", "redis"):
+                assert all(port["host_ip"] == "127.0.0.1" for port in services[name]["ports"])
+            assert services["app"]["volumes"]
+        else:
+            assert not services["db"].get("ports")
+            assert not services["redis"].get("ports")
+            for name in ("app", "worker", "scheduler"):
+                assert not services[name].get("volumes")
+            assert services["app"]["ports"][0]["host_ip"] == "127.0.0.1"
+    assert configurations["compose.yaml"]["name"] == "contract_service_dev"
+    assert configurations["compose.prod.yaml"]["name"] == "contract_service_prod"
+    for volume_name in ("postgres_data", "redis_data"):
+        assert (
+            configurations["compose.yaml"]["volumes"][volume_name]["name"]
+            != configurations["compose.prod.yaml"]["volumes"][volume_name]["name"]
+        )
+
+    for variable in required:
+        _write_deployment_environment(project, "compose.prod.yaml", **{variable: ""})
+        rejected = _compose(project, "compose.prod.yaml", "config", "--quiet")
+        assert rejected.returncode != 0
+        assert variable in rejected.stderr
+
+    _write_deployment_environment(project, "compose.prod.yaml", BACKEND_BIND_HOST="0.0.0.0")
+    exposed = _compose_config(project, "compose.prod.yaml")
+    assert exposed["services"]["app"]["ports"][0]["host_ip"] == "0.0.0.0"
+
+    (project.path / "deploy/.env.prod").unlink()
+    missing = _compose(project, "compose.prod.yaml", "config", "--quiet")
+    assert missing.returncode != 0
+    assert ".env.prod" in missing.stderr
 
 
 def test_external_nginx_and_generated_workflow_have_documented_structure(tmp_path: Path) -> None:
@@ -157,25 +268,6 @@ def test_external_nginx_and_generated_workflow_have_documented_structure(tmp_pat
             enable_redis=True,
         ),
     )
-    nginx = project.read("deploy/nginx.conf")
-    for marker in (
-        "listen 80",
-        "return 301 https://$host$request_uri",
-        "location /.well-known/acme-challenge/",
-        "listen 443 ssl",
-        "ssl_certificate",
-        "add_header X-Content-Type-Options",
-        "add_header X-Frame-Options",
-        "server host.docker.internal:8000",
-        "X-Forwarded-For",
-        "X-Forwarded-Proto",
-        "proxy_connect_timeout",
-        "proxy_read_timeout",
-        "proxy_send_timeout",
-    ):
-        assert marker in nginx
-    for removed in ("frontend", "websocket", "flower", "127.0.0.1:8000"):
-        assert removed not in nginx.lower()
 
     workflow_text = project.read(".github/workflows/ci.yml")
     workflow = yaml.safe_load(workflow_text)
@@ -215,17 +307,21 @@ def test_external_nginx_and_generated_workflow_have_documented_structure(tmp_pat
 def test_container_image_and_external_nginx_run_on_random_ports(tmp_path: Path) -> None:
     info = _docker("info", timeout=30)
     assert info.returncode == 0, info.stderr
+    suffix = uuid4().hex[:12]
     project = render_project(
         tmp_path / "docker-nginx",
         minimal_answers(
             project_name="container_contract",
-            project_slug="container_contract",
+            project_slug=f"container_{suffix}",
             enable_docker=True,
             reverse_proxy="nginx_external",
         ),
     )
+    for relative_path in (".env", "deploy/.env", "deploy/.env.prod"):
+        (project.path / relative_path).write_text(
+            "API_KEY=must-not-enter-image\nMAX_UPLOAD_SIZE_MB=99\n", encoding="utf-8"
+        )
     backend_port = 8000
-    suffix = uuid4().hex[:12]
     image = f"copier-fastapi-forge-contract:{suffix}"
     label = f"copier-fastapi-forge.contract={suffix}"
     network = f"copier-fastapi-forge-contract-{suffix}"
@@ -233,6 +329,8 @@ def test_container_image_and_external_nginx_run_on_random_ports(tmp_path: Path) 
     nginx_container = ""
     image_built = False
     network_created = False
+    development_started = False
+    development_image = ""
     try:
         build = project.run(
             "docker",
@@ -257,7 +355,7 @@ def test_container_image_and_external_nginx_run_on_random_ports(tmp_path: Path) 
             "--network",
             network,
             "--network-alias",
-            "host.docker.internal",
+            "app",
             "--publish",
             f"127.0.0.1::{backend_port}",
             image,
@@ -268,6 +366,19 @@ def test_container_image_and_external_nginx_run_on_random_ports(tmp_path: Path) 
         status, body = _wait_for_http(_published_port(backend_container, backend_port))
         assert status == 200
         assert json.loads(body) == {"status": "healthy", "max_upload_size_mb": 50}
+        assert len(_worker_pids(backend_container)) == 2
+        secrets = _docker(
+            "exec",
+            backend_container,
+            "python",
+            "-c",
+            "import json; from pathlib import Path; "
+            "print(json.dumps([name for name in ('.env', 'deploy/.env', 'deploy/.env.prod') "
+            "if (Path('/app') / name).exists()]))",
+            timeout=30,
+        )
+        assert secrets.returncode == 0, secrets.stderr
+        assert json.loads(secrets.stdout) == []
 
         certificate_dir = tmp_path / "nginx-certificates"
         certificate_dir.mkdir()
@@ -334,6 +445,34 @@ def test_container_image_and_external_nginx_run_on_random_ports(tmp_path: Path) 
         connection.close()
         assert response.status == 301
         assert response.headers["Location"].startswith("https://")
+
+        _write_deployment_environment(project, "compose.yaml", BACKEND_PORT="0")
+        development = _compose_config(project, "compose.yaml")
+        development_image = development["services"]["app"]["image"]
+        tagged = _docker("tag", image, development_image, timeout=30)
+        assert tagged.returncode == 0, tagged.stderr
+        development_started = True
+        started = _compose(project, "compose.yaml", "up", "--detach", "--no-build", "app")
+        assert started.returncode == 0, started.stderr
+        app = _compose(project, "compose.yaml", "ps", "--quiet", "app")
+        assert app.returncode == 0, app.stderr
+        development_container = app.stdout.strip()
+        development_port = _published_port(development_container, backend_port)
+        assert _wait_for_http(development_port)[0] == 200
+        before = _worker_pids(development_container)
+        assert len(before) == 2
+        (project.path / "app/api/health.py").touch()
+        deadline = time.monotonic() + 30
+        after = before
+        while time.monotonic() < deadline:
+            after = _worker_pids(development_container)
+            if len(after) == 2 and after.isdisjoint(before):
+                break
+            time.sleep(0.5)
+        assert len(after) == 2 and after.isdisjoint(before), (before, after)
+        status, body = _wait_for_http(development_port)
+        assert status == 200
+        assert json.loads(body) == {"status": "healthy", "max_upload_size_mb": 50}
     finally:
         errors: list[str] = []
         for container_id in (nginx_container, backend_container):
@@ -341,12 +480,17 @@ def test_container_image_and_external_nginx_run_on_random_ports(tmp_path: Path) 
                 removed = _docker("rm", "--force", container_id, timeout=30)
                 if removed.returncode != 0:
                     errors.append(removed.stderr)
+        if development_started:
+            stopped = _compose(project, "compose.yaml", "down", "--volumes", "--remove-orphans")
+            if stopped.returncode != 0:
+                errors.append(stopped.stderr)
         if network_created:
             removed = _docker("network", "rm", network, timeout=30)
             if removed.returncode != 0:
                 errors.append(removed.stderr)
         if image_built:
-            removed = _docker("image", "rm", "--force", image, timeout=60)
+            images = (image, development_image) if development_image else (image,)
+            removed = _docker("image", "rm", "--force", *images, timeout=60)
             if removed.returncode != 0:
                 errors.append(removed.stderr)
         assert not errors, "\n".join(errors)

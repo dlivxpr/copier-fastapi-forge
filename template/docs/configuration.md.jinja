@@ -1,6 +1,6 @@
 # 配置参考
 
-应用通过 `pydantic-settings` 从环境变量和项目根目录 `.env` 加载配置。字段、类型、默认值与 validator 位于 `app/core/config.py`；变量说明见 `ENV_VARS.md`。
+应用通过 `pydantic-settings` 从环境变量和项目根目录 `.env` 加载配置。字段、类型、默认值与 validator 位于 `app/core/config.py`；变量说明见 `ENV_VARS.md`。[% if enable_docker %]Docker 容器内没有 `.env` 文件：app/worker/scheduler 由 Compose `env_file` 注入 `deploy/.env`（开发）或 `deploy/.env.prod`（生产）中的同名字段，基础设施变量见 `ENV_VARS.md`「Docker 编排」。[% endif %]
 
 ## 开始配置
 
@@ -23,7 +23,7 @@ uv run python -c "from app.core.config import settings; print(settings.PROJECT_N
 
 ## PostgreSQL
 
-连接设置由 `POSTGRES_*` 与 `DB_POOL_*` 字段组成。API 使用 async driver；migration CLI 使用 Alembic。compose 内部将 `POSTGRES_HOST` 对应到 `db` service。
+连接设置由 `POSTGRES_*` 与 `DB_POOL_*` 字段组成。API 使用 async driver；migration CLI 使用 Alembic。compose 内部将 `POSTGRES_HOST` 对应到 `db` service。[% if enable_docker %]`DB_POOL_*` 按每个 API worker 计；Docker API 固定 2 个 worker，当前生成值下整个 API 最多 [[ (db_pool_size + db_max_overflow) * 2 ]] 个连接。[% endif %]
 [% endif %][% if enable_redis %]
 
 ## Redis
@@ -33,7 +33,7 @@ uv run python -c "from app.core.config import settings; print(settings.PROJECT_N
 
 ## Rate limiting
 
-`RATE_LIMIT_REQUESTS` 与 `RATE_LIMIT_PERIOD` 定义默认窗口。`RATE_LIMIT_STORAGE=[[ rate_limit_storage ]]`；选择 Redis storage 时复用 API Redis endpoint。
+`RATE_LIMIT_REQUESTS` 与 `RATE_LIMIT_PERIOD` 定义默认窗口。`RATE_LIMIT_STORAGE=[[ rate_limit_storage ]]`；选择 Redis storage 时复用 API Redis endpoint。[% if enable_docker %]Docker 部署固定使用 Redis storage，使 2 个 API worker 共享计数；生成器已强制该组合，非 Docker 运行才可使用 `memory`。[% endif %]
 [% endif %][% if background_tasks == "taskiq" %]
 
 ## Taskiq

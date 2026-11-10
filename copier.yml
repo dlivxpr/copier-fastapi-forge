@@ -166,6 +166,11 @@ enable_docker:
   type: bool
   help: Generate Docker deployment assets
   default: true
+  validator: >-
+    [% if enable_docker and enable_rate_limiting and
+    (not enable_redis or rate_limit_storage != 'redis') %]
+    Docker deployments with rate limiting require enable_redis=true and rate_limit_storage=redis
+    [% endif %]
 
 reverse_proxy:
   type: str

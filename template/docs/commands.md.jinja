@@ -45,12 +45,18 @@ uv run [[ project_slug ]] taskiq scheduler
 
 ## Docker Compose
 
+所有命令显式指定 env 文件；首次使用前从对应 `.example` 模板复制。
+
 ```bash
-docker compose -f deploy/compose.yaml config
-docker compose -f deploy/compose.yaml up --build
-docker compose -f deploy/compose.dev.yaml up --build
-docker compose -f deploy/compose.prod.yaml up -d --build
-docker compose -f deploy/compose.prod.yaml logs -f app
-docker compose -f deploy/compose.prod.yaml down
+# 开发（源码只读挂载、API --reload）
+cp deploy/.env.example deploy/.env
+docker compose --env-file deploy/.env -f deploy/compose.yaml config
+docker compose --env-file deploy/.env -f deploy/compose.yaml up --build
+
+# 压测与生产
+cp deploy/.env.prod.example deploy/.env.prod
+docker compose --env-file deploy/.env.prod -f deploy/compose.prod.yaml up -d --build
+docker compose --env-file deploy/.env.prod -f deploy/compose.prod.yaml logs -f app
+docker compose --env-file deploy/.env.prod -f deploy/compose.prod.yaml down
 ```
 [% endif %]

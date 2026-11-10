@@ -21,8 +21,10 @@
 [% endif %][% if ai_framework == "pydantic_ai" %]- `app/agents/assistant.py`：无请求间可变状态的单轮 Pydantic AI Agent；模型通过 OpenAI Chat Completions-compatible endpoint 调用。
 - `app/api/agent.py`：deployment API Key 保护的 `POST /agent/run` JSON 与 `POST /agent/stream` SSE transport。
 [% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]- `app/core/telemetry.py`：configure-first 的 Logfire Pydantic AI instrumentation；默认不采集 model 或 binary content。
-[% endif %][% if enable_docker %]- `deploy/Dockerfile` 与三套 `deploy/compose*.yaml`：root-context、non-root backend image 和环境编排。
-[% if reverse_proxy == "nginx_external" %]- `deploy/nginx.conf`：外部 TLS reverse proxy；upstream 必须是容器可达的 backend host。
+[% endif %][% if enable_docker %]- `deploy/Dockerfile` 与两套编排 `deploy/compose.yaml`（开发）/`deploy/compose.prod.yaml`（压测、生产）：root-context、non-root backend image；API 容器以 Gunicorn 固定运行 2 个 Uvicorn worker。
+- `deploy/gunicorn.dev.conf.py`：仅开发编排引用的 Gunicorn 配置，`worker_int` hook 使 `--reload` 触发的变更以正常 shutdown 重启 worker；文件在镜像内，改动需重建镜像生效；生产命令不得引用。
+- `deploy/.env.example` 与 `deploy/.env.prod.example`：env 模板；实际 `deploy/.env`、`deploy/.env.prod` 手工复制，被 Git 与 image 排除，Compose 命令必须显式 `--env-file`。
+[% if reverse_proxy == "nginx_external" %]- `deploy/nginx.conf`：外部 TLS reverse proxy，不是 compose service；Nginx 容器须加入 `[[ project_slug ]]_prod_backend` 网络，upstream 固定为 `app:[[ backend_port ]]`，不使用 `host.docker.internal`。
 [% endif %][% endif %][% if ci_type == "github" %]- `.github/workflows/ci.yml`：独立 lint/test[% if enable_docker %]/docker[% endif %] jobs。
 [% endif %]
 
@@ -30,7 +32,7 @@
 uv sync --all-groups
 uv run [[ project_slug ]] server run --port [[ backend_port ]]
 uv run pytest
-[% if enable_docker %]docker compose -f deploy/compose.yaml config
+[% if enable_docker %]docker compose --env-file deploy/.env -f deploy/compose.yaml config  # 首次先 cp deploy/.env.example deploy/.env
 [% endif %]```
 
 ## 运行时 contract

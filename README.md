@@ -99,16 +99,19 @@ uv run my_service server run
 
 ## 使用 Docker
 
-启用 Docker 时，可从项目根目录启动默认编排：
+启用 Docker 时，生成项目提供两套独立编排，命令均从项目根目录执行并显式指定 env 文件：
+
+- `deploy/compose.yaml` + `deploy/.env`：开发环境，只读挂载源码并启用 reload
+- `deploy/compose.prod.yaml` + `deploy/.env.prod`：压测与生产环境
+
+开发环境启动：
 
 ```bash
-docker compose -f deploy/compose.yaml up --build
+cp deploy/.env.example deploy/.env
+docker compose --env-file deploy/.env -f deploy/compose.yaml up --build
 ```
 
-生成项目还包含开发和生产编排：
-
-- `deploy/compose.dev.yaml`
-- `deploy/compose.prod.yaml`
+生产环境对应 `deploy/.env.prod.example` 与 `deploy/compose.prod.yaml`。两套编排使用独立 project name，容器、网络与卷互不共享；详细说明见生成项目的 `docs/deploy.md`。
 
 ## 下一步
 

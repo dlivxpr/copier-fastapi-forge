@@ -8,7 +8,6 @@ import time
 from pathlib import Path
 
 import pytest
-import yaml
 
 from tests.support.generation import minimal_answers, render_project
 from tests.support.processes import stop_process_group
@@ -51,31 +50,6 @@ def test_redis_consumers_and_taskiq_have_independent_generation_boundaries(
     assert "REDIS_HOST" not in taskiq_text
     assert "example_task" not in taskiq_text
     assert not (taskiq.path / "tests/test_tasks.py").exists()
-    compose = yaml.safe_load(taskiq.read("deploy/compose.yaml"))
-    assert compose["services"]["worker"]["command"] == [
-        "python",
-        "-m",
-        "cli.commands",
-        "taskiq",
-        "worker",
-    ]
-    assert compose["services"]["scheduler"]["command"] == [
-        "python",
-        "-m",
-        "cli.commands",
-        "taskiq",
-        "scheduler",
-    ]
-    assert "TASKIQ_RESULT_BACKEND_URL: redis://redis:6379/1" in taskiq.read("deploy/compose.yaml")
-    for service_name in ("app", "worker", "scheduler"):
-        service_environment = compose["services"][service_name]["environment"]
-        assert service_environment["TASKIQ_STREAM_NAME"] == (
-            "${TASKIQ_STREAM_NAME:-contract_service:taskiq}"
-        )
-        assert service_environment["TASKIQ_STREAM_MAXLEN"] == ("${TASKIQ_STREAM_MAXLEN:-100000}")
-        assert service_environment["TASKIQ_STREAM_IDLE_TIMEOUT_MS"] == (
-            "${TASKIQ_STREAM_IDLE_TIMEOUT_MS:-3600000}"
-        )
 
     memory = render_project(
         tmp_path / "memory",

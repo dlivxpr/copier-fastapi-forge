@@ -24,10 +24,10 @@
 |`enable_caching`|是否生成 Redis cache；默认关闭，启用时要求 `enable_redis`|
 |`enable_rate_limiting`|是否生成 HTTP rate limiting；默认关闭|
 |`rate_limit_requests` / `rate_limit_period`|rate limiting 启用时出现；默认 `100` / `60`，且必须大于零|
-|`rate_limit_storage`|rate limiting 启用时选择 `memory` 或 `redis`；默认 `memory`，选择 Redis 时要求 `enable_redis`|
+|`rate_limit_storage`|rate limiting 启用时选择 `memory` 或 `redis`；默认 `memory`，选择 Redis 时要求 `enable_redis`；同时启用 `enable_docker` 时只允许 `redis`（要求 `enable_redis`），`memory` 仅在非 Docker 生成中可用|
 |`ai_framework`|`pydantic_ai` 或 `none`；默认 `pydantic_ai`|
 |`enable_logfire`|Pydantic AI 启用时出现；默认启用|
-|`enable_docker`|默认启用|
+|`enable_docker`|默认启用；与 `enable_rate_limiting` 同时启用时要求 `enable_redis` 且 `rate_limit_storage=redis`，不满足的组合在生成前被 validator 拒绝|
 |`reverse_proxy`|Docker 启用时选择 `nginx_external` 或 `none`；默认 `nginx_external`|
 |`ci_type`|`github` 或 `none`；默认 `github`|
 |`deployment_api_key`|所有调用方共享的部署级 secret；默认开发占位值 `change-me-in-production`|
@@ -47,7 +47,7 @@ Copier 的 `--defaults`、`--data` 和 `--data-file` 对同一答案必须得到
 - 使用独立 Redis Streams broker/result backend 生命周期的 Taskiq worker 与 scheduler；
 - 无请求间可变状态的单轮 Pydantic AI Agent；
 - 只 instrument Pydantic AI 且默认不采集模型内容的 Logfire；
-- Docker、三套 compose、外部 Nginx 和 GitHub Actions；
+- Docker 开发与压测/生产两套 Compose 编排、外部 Nginx 和 GitHub Actions；
 - 根级 `AGENTS.md` 与按能力生成的 `.agents/skills/`。
 
 Frontend、用户/JWT、teams、billing、消息渠道、文件存储、Webhooks、RAG、Kubernetes、Helm、Traefik、替代队列、替代 telemetry、provider SDK、分页、WebSocket Agent、多轮 conversation 和 demo routes/tasks 不属于产品边界。
@@ -95,8 +95,13 @@ Taskiq 使用项目级命名的 Redis Stream、固定 consumer group，并从 `0
 
 ## 部署、CI 与 guidance
 
-- Docker 生成 multi-stage、non-root、healthcheck image，以及 base、development 和 production 三套 compose；资产位于 `deploy/`。
-- 外部 Nginx 提供 TLS、HTTP→HTTPS、ACME、security headers、forwarded headers 和 timeout，并代理到外部可达 backend 地址；不作为 compose service。
+- Docker 生成 multi-stage、non-root、healthcheck image，资产位于 `deploy/`；image 默认 CMD 直接以 Gunicorn 和 `uvicorn_worker.UvicornWorker` 运行 API，固定 `--workers 2`，不读取 `WEB_CONCURRENCY`，非 Docker CLI 行为不变。
+- 仅生成开发（`deploy/compose.yaml` + `deploy/.env`）与压测/生产（`deploy/compose.prod.yaml` + `deploy/.env.prod`）两套编排，命令必须显式 `--env-file`；env 只生成 `deploy/.env.example` 与 `deploy/.env.prod.example` 模板，实际文件手工复制、缺失即失败，且被 Git 与 image 排除。根 `.env.example`/`.env` 与非 Docker 行为保持不变。
+- 两套编排使用独立 top-level project name（`<project_slug>_dev` / `<project_slug>_prod`），容器、网络和卷相互隔离；已有卷不删除、不自动迁移。开发编排只读挂载 app/cli 源码并启用 `--reload`，经仅开发引用的 `deploy/gunicorn.dev.conf.py`（`worker_int` hook）使变更 worker 正常重启，重载后恢复为 2 个；该文件随镜像分发，改动需重建镜像生效。生产无 reload、preload 或源码挂载，也不引用该配置文件。
+- `DB_POOL_*` 按每个 API worker 计（默认 `5`/`10` 时两个 worker 最多 30 个数据库连接），Docker 部署不自动减半。
+- 生产必填非空：`API_KEY`；PostgreSQL 启用时 `POSTGRES_PASSWORD`；Redis 或 Taskiq 启用时 `REDIS_PASSWORD`；Agent 启用时 `LLM_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL`；Logfire 启用时 `LOGFIRE_TOKEN` 可选。缺失时 Compose 以 `${VAR:?}` 语义在解析阶段失败，不新增联网或强度验证。
+- 基础设施变量统一为 `BACKEND_BIND_HOST`（默认 `127.0.0.1`）、`BACKEND_PORT`（宿主 API 端口，默认 `backend_port`）、`POSTGRES_PUBLISHED_PORT`（仅开发且启用 PostgreSQL，默认 `5432`）和 `REDIS_PUBLISHED_PORT`（仅开发且启用 Redis 或 Taskiq，默认 `6379`）。开发编排发布的全部宿主端口绑定 `127.0.0.1`；生产编排除 API 外不发布任何宿主端口，API 默认绑定 localhost，可为远程压测显式放开且应由防火墙保护。
+- 外部 Nginx 提供 TLS、HTTP→HTTPS、ACME、security headers、forwarded headers 和 timeout；不作为 compose service，其容器加入 `<project_slug>_prod_backend` 网络并以 `app:<backend_port>` 为 upstream，不依赖 `host.docker.internal`。
 - GitHub Actions 生成独立 lint/test jobs、coverage XML、非阻断 Codecov，以及按能力生成的 PostgreSQL、Redis 和 Docker 步骤。
 - 生成文档、tests 和 agent guidance 必须准确反映所选能力，不得引用未生成的命令、路径、依赖或配置。
 - `.agents/skills/pytest-suite/` 始终生成；PostgreSQL 启用时生成 `alembic-migration/`，Taskiq 启用时生成 `background-task/`。不生成 `.omp/`、`.agents/commands/`、`.agents/rules/` 或 `.agents/skills/agent-tool/`。

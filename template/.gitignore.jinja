@@ -8,6 +8,10 @@ venv/
 
 # Environment
 .env
+[% if enable_docker %]# Docker 部署实际 env 文件（.env.example / .env.prod.example 样例保留入库）
+deploy/.env
+deploy/.env.prod
+[% endif %]
 
 # Testing
 .coverage

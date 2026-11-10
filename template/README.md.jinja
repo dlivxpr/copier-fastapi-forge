@@ -45,23 +45,23 @@ Windows PowerShell 可使用 `Copy-Item .env.example .env`。启动后访问：
 
 ## Docker 环境
 
-三套编排均从项目根目录作为 build context：
+两套独立编排均从项目根目录执行，build context 为项目根：
 
 | 文件 | 用途 |
 |---|---|
-| `deploy/compose.yaml` | 默认单机环境 |
-| `deploy/compose.dev.yaml` | 挂载源码并启用 reload |
-| `deploy/compose.prod.yaml` | 生产进程与持久化基础设施 |
+| `deploy/compose.yaml` + `deploy/.env` | 开发：app/cli 源码只读挂载、API `--reload` |
+| `deploy/compose.prod.yaml` + `deploy/.env.prod` | 压测与生产：无 reload、无源码挂载 |
 
 ```bash
-docker compose -f deploy/compose.yaml config
-docker compose -f deploy/compose.yaml up --build
+cp deploy/.env.example deploy/.env
+docker compose --env-file deploy/.env -f deploy/compose.yaml config
+docker compose --env-file deploy/.env -f deploy/compose.yaml up --build
 ```
 
-镜像使用 multi-stage build、非 root 用户、`HEALTHCHECK` 和项目 CLI 启动。关闭 Docker 选项时，整个 `deploy/` 目录与本节不会生成。
+镜像使用 multi-stage build、非 root 用户和 `HEALTHCHECK`；API 容器以 Gunicorn 固定运行 2 个 Uvicorn worker。两套编排使用独立 project name（`[[ project_slug ]]_dev` / `[[ project_slug ]]_prod`），容器、网络与卷互不共享。关闭 Docker 选项时，整个 `deploy/` 目录与本节不会生成。
 [% if reverse_proxy == "nginx_external" %]
 
-`deploy/nginx.conf` 是外部 Nginx 配置。部署前挂载 TLS 证书到 `/etc/nginx/ssl/`，并确保容器可解析 `host.docker.internal` 到 backend 所在主机。
+`deploy/nginx.conf` 是外部 Nginx 配置，不作为 compose service。Nginx 容器须加入 `[[ project_slug ]]_prod_backend` 网络，upstream 通过 service 名 `app` 访问 backend，不依赖 `host.docker.internal`；挂载 TLS 证书等完整步骤见 `docs/deploy.md`。
 [% endif %][% endif %]
 [% if database == "postgresql" %]
 

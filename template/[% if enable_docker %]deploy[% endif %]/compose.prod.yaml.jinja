@@ -1,32 +1,24 @@
+name: [[ project_slug ]]_prod
+
+# 生产必填环境变量校验：任一变量缺失或为空时，docker compose 解析即失败。
+x-required-env:
+  API_KEY: "${API_KEY:?必须在 deploy/.env.prod 设置非空 API_KEY}"
+[% if database == "postgresql" %]  POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?必须在 deploy/.env.prod 设置非空 POSTGRES_PASSWORD}"
+[% endif %][% if enable_redis or background_tasks == "taskiq" %]  REDIS_PASSWORD: "${REDIS_PASSWORD:?必须在 deploy/.env.prod 设置非空 REDIS_PASSWORD}"
+[% endif %][% if ai_framework == "pydantic_ai" %]  LLM_BASE_URL: "${LLM_BASE_URL:?必须在 deploy/.env.prod 设置非空 LLM_BASE_URL}"
+  LLM_API_KEY: "${LLM_API_KEY:?必须在 deploy/.env.prod 设置非空 LLM_API_KEY}"
+  LLM_MODEL: "${LLM_MODEL:?必须在 deploy/.env.prod 设置非空 LLM_MODEL}"
+[% endif %]
 services:
   app:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
     image: [[ project_slug ]]_backend:prod
-    environment:
-      API_KEY: "${API_KEY:-[[ deployment_api_key ]]}"
-      DEBUG: "false"
-      ENVIRONMENT: production
-[% if database == "postgresql" %]      POSTGRES_HOST: db
-      POSTGRES_PORT: "5432"
-      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
-      POSTGRES_DB: "${POSTGRES_DB:-[[ project_slug ]]}"
-[% endif %][% if enable_redis %]      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
-[% endif %][% if background_tasks == "taskiq" %]      TASKIQ_BROKER_URL: "redis://:${REDIS_PASSWORD:-}@redis:6379/1"
-      TASKIQ_RESULT_BACKEND_URL: "redis://:${REDIS_PASSWORD:-}@redis:6379/1"
-      TASKIQ_STREAM_NAME: "${TASKIQ_STREAM_NAME:-[[ project_slug ]]:taskiq}"
-      TASKIQ_STREAM_MAXLEN: "${TASKIQ_STREAM_MAXLEN:-100000}"
-      TASKIQ_STREAM_IDLE_TIMEOUT_MS: "${TASKIQ_STREAM_IDLE_TIMEOUT_MS:-3600000}"
-[% endif %][% if ai_framework == "pydantic_ai" %]      LLM_BASE_URL: "${LLM_BASE_URL:-https://api.example.com/v1}"
-      LLM_API_KEY: "${LLM_API_KEY:-model-key-CHANGEME}"
-      LLM_MODEL: "${LLM_MODEL:-model-name-CHANGEME}"
-[% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]      LOGFIRE_TOKEN: "${LOGFIRE_TOKEN:-}"
-[% endif %]    ports:
-      - "[[ backend_port ]]:[[ backend_port ]]"
+    env_file:
+      - .env.prod
+    ports:
+      - "${BACKEND_BIND_HOST:-127.0.0.1}:${BACKEND_PORT:-[[ backend_port ]]}:[[ backend_port ]]"
 [% if database == "postgresql" or enable_redis or background_tasks == "taskiq" %]    depends_on:
 [% if database == "postgresql" %]      db:
         condition: service_healthy
@@ -41,7 +33,7 @@ services:
     environment:
       POSTGRES_DB: "${POSTGRES_DB:-[[ project_slug ]]}"
       POSTGRES_USER: "${POSTGRES_USER:-postgres}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?必须在 deploy/.env.prod 设置非空 POSTGRES_PASSWORD}"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -65,7 +57,7 @@ services:
           exec redis-server --appendonly yes;
         fi
     environment:
-      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
+      REDIS_PASSWORD: "${REDIS_PASSWORD:?必须在 deploy/.env.prod 设置非空 REDIS_PASSWORD}"
     volumes:
       - redis_data:/data
     networks:
@@ -83,21 +75,9 @@ services:
       dockerfile: deploy/Dockerfile
     image: [[ project_slug ]]_backend:prod
     command: ["python", "-m", "cli.commands", "taskiq", "worker"]
-    environment:
-      TASKIQ_BROKER_URL: "redis://:${REDIS_PASSWORD:-}@redis:6379/1"
-      TASKIQ_RESULT_BACKEND_URL: "redis://:${REDIS_PASSWORD:-}@redis:6379/1"
-      TASKIQ_STREAM_NAME: "${TASKIQ_STREAM_NAME:-[[ project_slug ]]:taskiq}"
-      TASKIQ_STREAM_MAXLEN: "${TASKIQ_STREAM_MAXLEN:-100000}"
-      TASKIQ_STREAM_IDLE_TIMEOUT_MS: "${TASKIQ_STREAM_IDLE_TIMEOUT_MS:-3600000}"
-[% if database == "postgresql" %]      POSTGRES_HOST: db
-      POSTGRES_PORT: "5432"
-      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
-      POSTGRES_DB: "${POSTGRES_DB:-[[ project_slug ]]}"
-[% endif %][% if enable_redis %]      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
-[% endif %]    depends_on:
+    env_file:
+      - .env.prod
+    depends_on:
       redis:
         condition: service_healthy
 [% if database == "postgresql" %]      db:
@@ -112,21 +92,9 @@ services:
       dockerfile: deploy/Dockerfile
     image: [[ project_slug ]]_backend:prod
     command: ["python", "-m", "cli.commands", "taskiq", "scheduler"]
-    environment:
-      TASKIQ_BROKER_URL: "redis://:${REDIS_PASSWORD:-}@redis:6379/1"
-      TASKIQ_RESULT_BACKEND_URL: "redis://:${REDIS_PASSWORD:-}@redis:6379/1"
-      TASKIQ_STREAM_NAME: "${TASKIQ_STREAM_NAME:-[[ project_slug ]]:taskiq}"
-      TASKIQ_STREAM_MAXLEN: "${TASKIQ_STREAM_MAXLEN:-100000}"
-      TASKIQ_STREAM_IDLE_TIMEOUT_MS: "${TASKIQ_STREAM_IDLE_TIMEOUT_MS:-3600000}"
-[% if database == "postgresql" %]      POSTGRES_HOST: db
-      POSTGRES_PORT: "5432"
-      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
-      POSTGRES_DB: "${POSTGRES_DB:-[[ project_slug ]]}"
-[% endif %][% if enable_redis %]      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
-[% endif %]    depends_on:
+    env_file:
+      - .env.prod
+    depends_on:
       redis:
         condition: service_healthy
 [% if database == "postgresql" %]      db:

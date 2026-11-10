@@ -1,5 +1,7 @@
+# 外部 Nginx 容器须加入 compose 生产栈网络 [[ project_slug ]]_prod_backend，
+# 通过 service 名 app 直连容器（不再依赖 host.docker.internal）。
 upstream backend {
-    server host.docker.internal:[[ backend_port ]];
+    server app:[[ backend_port ]];
 }
 
 server {

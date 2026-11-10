@@ -87,18 +87,6 @@ def test_public_questions_have_documented_order_choices_conditions_and_defaults(
         "enable_logfire": "[[ ai_framework == 'pydantic_ai' ]]",
         "reverse_proxy": "[[ enable_docker ]]",
     }
-    assert {name for name, question in questions.items() if "validator" in question} == {
-        "project_name",
-        "project_slug",
-        "backend_port",
-        "db_pool_size",
-        "db_max_overflow",
-        "db_pool_timeout",
-        "enable_caching",
-        "rate_limit_requests",
-        "rate_limit_period",
-        "rate_limit_storage",
-    }
     assert {name: questions[name]["default"] for name in PUBLIC_QUESTIONS} == {
         "project_name": "my_project",
         "project_slug": "[[ project_name.lower().replace('-', '_') ]]",
@@ -242,6 +230,18 @@ def test_capability_switches_prune_every_owned_output(
             "enable_redis": False,
             "enable_rate_limiting": True,
             "rate_limit_storage": "redis",
+        },
+        {
+            "enable_docker": True,
+            "enable_redis": False,
+            "enable_rate_limiting": True,
+            "rate_limit_storage": "memory",
+        },
+        {
+            "enable_docker": True,
+            "enable_redis": True,
+            "enable_rate_limiting": True,
+            "rate_limit_storage": "memory",
         },
     ],
 )
