@@ -111,7 +111,7 @@ cp deploy/.env.example deploy/.env
 docker compose --env-file deploy/.env -f deploy/compose.yaml up --build
 ```
 
-生产环境对应 `deploy/.env.prod.example` 与 `deploy/compose.prod.yaml`。两套编排使用独立 project name，容器、网络与卷互不共享；详细说明见生成项目的 `docs/deploy.md`。
+生产环境对应 `deploy/.env.prod.example` 与 `deploy/compose.prod.yaml`。两套编排使用独立 project name，容器、网络与卷互不共享；详细步骤见生成项目的 `MANUAL_STEPS.md` 容器部署清单。
 
 ## 下一步
 
@@ -121,7 +121,6 @@ docker compose --env-file deploy/.env -f deploy/compose.yaml up --build
 - `ENV_VARS.md`：环境变量
 - `SECURITY.md`：安全与凭据配置
 - `MANUAL_STEPS.md`：生成后需要完成的手工步骤
-- `docs/`：架构、测试、命令和扩展方式
 
 当前版本支持从模板创建新项目，不承诺通过 `copier update` 升级既有项目。
 

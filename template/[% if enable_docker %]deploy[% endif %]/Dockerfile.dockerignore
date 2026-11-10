@@ -23,7 +23,6 @@ htmlcov/
 
 *.md
 !README.md
-docs/
 
 dist/
 build/
@@ -36,7 +35,6 @@ deploy/.env.prod
 *.sqlite
 
 .github/
-.agents/
 
 deploy/compose*.yaml
 deploy/nginx.conf

@@ -48,7 +48,7 @@ Copier 的 `--defaults`、`--data` 和 `--data-file` 对同一答案必须得到
 - 无请求间可变状态的单轮 Pydantic AI Agent；
 - 只 instrument Pydantic AI 且默认不采集模型内容的 Logfire；
 - Docker 开发与压测/生产两套 Compose 编排、外部 Nginx 和 GitHub Actions；
-- 根级 `AGENTS.md` 与按能力生成的 `.agents/skills/`。
+- 根级 `AGENTS.md`。
 
 Frontend、用户/JWT、teams、billing、消息渠道、文件存储、Webhooks、RAG、Kubernetes、Helm、Traefik、替代队列、替代 telemetry、provider SDK、分页、WebSocket Agent、多轮 conversation 和 demo routes/tasks 不属于产品边界。
 
@@ -62,10 +62,10 @@ Frontend、用户/JWT、teams、billing、消息渠道、文件存储、Webhooks
 - `app.api.deps` 中部署级 API Key，以及按能力生成的数据库、Redis 和 Agent dependencies；
 - PostgreSQL 分支的 route → service → repository → async database 分层；repository 执行 `flush()` / `refresh()`，session manager 统一 `commit()` / `rollback()`；
 - API database engine 与 worker `NullPool` context 相互隔离；
-- Redis、cache、rate limiting、Taskiq 和 Agent 的能力文档中明确列出的扩展 seam；
-- 项目根的 tests、README、环境变量、安全、贡献、手工步骤和 how-to 文档。
+- README 与 `AGENTS.md` 中明确列出的 Redis、cache、rate limiting、Taskiq 和 Agent 扩展 seam；
+- 项目根的 tests、README、环境变量、安全、贡献和手工步骤。
 
-未被生成文档承诺的内部模块、符号、helper 排布和源码文本可自由重构。
+未被 README 或 `AGENTS.md` 承诺的内部模块、符号、helper 排布和源码文本可自由重构。
 
 ## HTTP 契约
 
@@ -103,8 +103,8 @@ Taskiq 使用项目级命名的 Redis Stream、固定 consumer group，并从 `0
 - 基础设施变量统一为 `BACKEND_BIND_HOST`（默认 `127.0.0.1`）、`BACKEND_PORT`（宿主 API 端口，默认 `backend_port`）、`POSTGRES_PUBLISHED_PORT`（仅开发且启用 PostgreSQL，默认 `5432`）和 `REDIS_PUBLISHED_PORT`（仅开发且启用 Redis 或 Taskiq，默认 `6379`）。开发编排发布的全部宿主端口绑定 `127.0.0.1`；生产编排除 API 外不发布任何宿主端口，API 默认绑定 localhost，可为远程压测显式放开且应由防火墙保护。
 - 外部 Nginx 提供 TLS、HTTP→HTTPS、ACME、security headers、forwarded headers 和 timeout；不作为 compose service，其容器加入 `<project_slug>_prod_backend` 网络并以 `app:<backend_port>` 为 upstream，不依赖 `host.docker.internal`。
 - GitHub Actions 生成独立 lint/test jobs、coverage XML、非阻断 Codecov，以及按能力生成的 PostgreSQL、Redis 和 Docker 步骤。
-- 生成文档、tests 和 agent guidance 必须准确反映所选能力，不得引用未生成的命令、路径、依赖或配置。
-- `.agents/skills/pytest-suite/` 始终生成；PostgreSQL 启用时生成 `alembic-migration/`，Taskiq 启用时生成 `background-task/`。不生成 `.omp/`、`.agents/commands/`、`.agents/rules/` 或 `.agents/skills/agent-tool/`。
+- 生成的 tests 和 agent guidance 必须准确反映所选能力，不得引用未生成的命令、路径、依赖或配置。
+- 生成项目不包含 `docs/`、`.agents/`、`.omp/` 或 `.claude/`；根级 `AGENTS.md` 是唯一 agent guidance。
 
 ## 演进规则
 

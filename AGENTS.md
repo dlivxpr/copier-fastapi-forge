@@ -22,7 +22,6 @@ Copier 直接读取 `copier.yml`，再以原生条件路径和 Jinja 条件渲�
 | `template/app/` | 生成 FastAPI runtime、可选能力与生命周期组合 |
 | `template/tests/` | 生成项目的行为测试 |
 | `template/AGENTS.md.jinja` | 根据所选能力生成的根级 agent guidance |
-| `template/.agents/` | 根据所选能力生成的 agent skills |
 | `tests/test_*_contract.py` | 按公开契约领域组织的生成与运行验收 |
 | `tests/support/` | 隔离生成环境、进程与真实服务的共享测试支持层 |
 | `scripts/lint_template.py` | 模板和条件路径的 Jinja 语法静态检查 |
