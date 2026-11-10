@@ -42,7 +42,7 @@ jobs:
           - name: generator
             files: >-
               tests/test_generator_contract.py
-              tests/test_docs_and_guidance_contract.py
+              tests/test_guidance_contract.py
               tests/test_http_contract.py
           - name: runtime
             files: >-
