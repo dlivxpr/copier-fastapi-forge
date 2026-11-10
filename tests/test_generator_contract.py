@@ -38,14 +38,14 @@ PUBLIC_QUESTIONS = (
     "background_tasks",
     "enable_redis",
     "enable_caching",
+    "enable_docker",
+    "reverse_proxy",
     "enable_rate_limiting",
     "rate_limit_requests",
     "rate_limit_period",
     "rate_limit_storage",
     "ai_framework",
     "enable_logfire",
-    "enable_docker",
-    "reverse_proxy",
     "ci_type",
     "deployment_api_key",
 )
@@ -60,7 +60,10 @@ def test_public_questions_have_documented_order_choices_conditions_and_defaults(
     questions = {key: value for key, value in config.items() if not key.startswith("_")}
     assert tuple(questions) == PUBLIC_QUESTIONS
     assert {
-        name: tuple(question["choices"].values())
+        name: tuple(
+            choice["value"] if isinstance(choice, dict) else choice
+            for choice in question["choices"].values()
+        )
         for name, question in questions.items()
         if "choices" in question
     } == {
@@ -108,7 +111,7 @@ def test_public_questions_have_documented_order_choices_conditions_and_defaults(
         "enable_rate_limiting": False,
         "rate_limit_requests": 100,
         "rate_limit_period": 60,
-        "rate_limit_storage": "memory",
+        "rate_limit_storage": "[% if enable_docker %]redis[% else %]memory[% endif %]",
         "ai_framework": "pydantic_ai",
         "enable_logfire": True,
         "enable_docker": True,
@@ -117,6 +120,42 @@ def test_public_questions_have_documented_order_choices_conditions_and_defaults(
         "deployment_api_key": "change-me-in-production",
     }
     assert questions["deployment_api_key"]["secret"] is True
+    assert "validator" not in questions["enable_docker"]
+    memory_choice = questions["rate_limit_storage"]["choices"]["Process memory"]
+    assert memory_choice["value"] == "memory"
+    assert "enable_docker" in memory_choice["validator"]
+
+
+def test_rate_limit_storage_disablement_depends_on_docker(tmp_path: Path) -> None:
+    memory = render_project(
+        tmp_path / "memory",
+        minimal_answers(
+            enable_rate_limiting=True, rate_limit_storage="memory", enable_docker=False
+        ),
+    )
+    assert 'storage_uri="memory://"' in memory.all_text()
+
+    docker_redis = render_project(
+        tmp_path / "docker-redis",
+        minimal_answers(
+            enable_rate_limiting=True,
+            rate_limit_storage="redis",
+            enable_docker=True,
+            reverse_proxy="none",
+        ),
+    )
+    assert "storage_uri=settings.REDIS_URL" in docker_redis.all_text()
+
+    with pytest.raises(ValueError, match=r"Invalid choice for 'rate_limit_storage'"):
+        render_project(
+            tmp_path / "docker-memory",
+            minimal_answers(
+                enable_rate_limiting=True,
+                rate_limit_storage="memory",
+                enable_docker=True,
+                reverse_proxy="none",
+            ),
+        )
 
 
 def test_default_profile_has_documented_capability_boundary(tmp_path: Path) -> None:
@@ -226,11 +265,6 @@ def test_capability_switches_prune_every_owned_output(
         {"enable_rate_limiting": True, "rate_limit_requests": 0},
         {"enable_rate_limiting": True, "rate_limit_period": 0},
         {"enable_redis": False, "enable_caching": True},
-        {
-            "enable_redis": False,
-            "enable_rate_limiting": True,
-            "rate_limit_storage": "redis",
-        },
         {
             "enable_docker": True,
             "enable_redis": False,

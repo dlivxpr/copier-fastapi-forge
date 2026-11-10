@@ -1,3 +1,4 @@
+[% set needs_redis = enable_redis or background_tasks == "taskiq" or (enable_rate_limiting and rate_limit_storage == "redis") -%]
 name: CI
 
 on:
@@ -28,7 +29,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-[% if database == "postgresql" or enable_redis or background_tasks == "taskiq" %]    services:
+[% if database == "postgresql" or needs_redis %]    services:
 [% if database == "postgresql" %]      postgres:
         image: postgres:16-alpine
         env:
@@ -42,7 +43,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-[% endif %][% if enable_redis or background_tasks == "taskiq" %]      redis:
+[% endif %][% if needs_redis %]      redis:
         image: redis:7-alpine
         ports:
           - 6379:6379
@@ -51,13 +52,13 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-[% endif %][% endif %][% if database == "postgresql" or enable_redis or background_tasks == "taskiq" or (ai_framework == "pydantic_ai" and enable_logfire) %]    env:
+[% endif %][% endif %][% if database == "postgresql" or needs_redis or (ai_framework == "pydantic_ai" and enable_logfire) %]    env:
 [% if database == "postgresql" %]      POSTGRES_HOST: 127.0.0.1
       POSTGRES_PORT: 5432
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: [[ project_slug ]]_test
-[% endif %][% if enable_redis %]      REDIS_HOST: 127.0.0.1
+[% endif %][% if enable_redis or (enable_rate_limiting and rate_limit_storage == "redis") %]      REDIS_HOST: 127.0.0.1
       REDIS_PORT: 6379
 [% endif %][% if background_tasks == "taskiq" %]      TASKIQ_BROKER_URL: redis://127.0.0.1:6379/1
       TASKIQ_RESULT_BACKEND_URL: redis://127.0.0.1:6379/1

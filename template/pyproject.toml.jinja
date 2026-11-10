@@ -28,7 +28,7 @@ dependencies = [
     "sqlmodel>=0.0.48",
 [% endif %]
 [% endif %]
-[% if enable_redis %]
+[% if enable_redis or (enable_rate_limiting and rate_limit_storage == "redis") %]
     "redis>=8.1.0",
 [% endif %]
 [% if background_tasks == "taskiq" %]

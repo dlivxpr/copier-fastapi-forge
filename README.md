@@ -6,7 +6,7 @@
 
 - FastAPI、异步 lifespan、统一异常响应、健康检查和 API Key 鉴权
 - 可选 PostgreSQL，以及 SQLAlchemy / SQLModel 二选一
-- 可选 Redis client、缓存和内存或 Redis rate limiting
+- 可选 Redis client、缓存和 memory 或 Redis rate limiting（Redis 存储自带 `REDIS_*` 配置，不要求共享 Redis client）
 - 可选 Taskiq worker 与 scheduler
 - 可选 Pydantic AI Agent 和 Logfire
 - 可选 Docker、外部 Nginx 配置和 GitHub Actions
@@ -57,14 +57,15 @@ uvx copier copy \
 | `background_tasks` | `taskiq`、`none` | `none` |
 | `enable_redis` | `true`、`false` | `false` |
 | `enable_caching` | `true`、`false` | `false` |
-| `enable_rate_limiting` | `true`、`false` | `false` |
-| `ai_framework` | `pydantic_ai`、`none` | `pydantic_ai` |
-| `enable_logfire` | `true`、`false` | `true` |
 | `enable_docker` | `true`、`false` | `true` |
 | `reverse_proxy` | `nginx_external`、`none` | `nginx_external` |
+| `enable_rate_limiting` | `true`、`false` | `false` |
+| `rate_limit_storage` | `memory`、`redis` | `redis`（Docker）、`memory`（非 Docker） |
+| `ai_framework` | `pydantic_ai`、`none` | `pydantic_ai` |
+| `enable_logfire` | `true`、`false` | `true` |
 | `ci_type` | `github`、`none` | `github` |
 
-部分选项会根据前置选择出现。例如，`orm_type` 仅在启用 PostgreSQL 时可选，Redis cache 要求同时启用 `enable_redis`。所有输入、默认值和组合约束见 [`docs/product-contract.md`](docs/product-contract.md)。
+部分选项会根据前置选择出现。例如，`orm_type` 仅在启用 PostgreSQL 时可选，Redis cache 要求同时启用 `enable_redis`。启用 Docker 时 `rate_limit_storage` 的 `memory` 选项会被禁用：生成镜像固定两个 Gunicorn worker，进程内计数会让实际配额成倍放大。所有输入、默认值和组合约束见 [`docs/product-contract.md`](docs/product-contract.md)。
 
 ## 运行生成的项目
 

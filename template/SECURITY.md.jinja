@@ -1,3 +1,4 @@
+[% set needs_redis = enable_redis or background_tasks == "taskiq" or (enable_rate_limiting and rate_limit_storage == "redis") -%]
 # 安全
 
 ## 报告漏洞
@@ -30,7 +31,7 @@
 - 日志不得包含 API Key、token、password 或 secret。
 - 配置通过环境变量加载；`.env` 不得提交。[% if enable_docker %]实际 `deploy/.env` 与 `deploy/.env.prod` 同样不得提交，且不进入镜像；仓库只保留对应 `.example` 模板。[% endif %]
 [% if database == "postgresql" %]- 数据库账号遵循最小权限；migration 账号与 runtime 账号可在生产环境分离。
-[% endif %][% if enable_redis or background_tasks == "taskiq" %]- Redis 不应直接暴露到公网；生产环境启用网络隔离和访问控制。
+[% endif %][% if needs_redis %]- Redis 不应直接暴露到公网；生产环境启用网络隔离和访问控制。
 [% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]- Logfire instrumentation 保持 `include_content=False` 与 `include_binary_content=False`。
 [% endif %]
 

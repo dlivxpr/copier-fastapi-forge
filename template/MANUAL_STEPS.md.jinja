@@ -1,3 +1,4 @@
+[% set needs_redis = enable_redis or background_tasks == "taskiq" or (enable_rate_limiting and rate_limit_storage == "redis") -%]
 # [[ project_name ]] 手工配置步骤
 
 生成器已经创建代码；以下步骤涉及外部资源、凭据或部署环境，必须由项目维护者完成。
@@ -19,13 +20,13 @@ cp .env.example .env
 [% endif %]- [ ] 在 `.env` 填写 `POSTGRES_HOST`、`POSTGRES_PORT`、`POSTGRES_USER`、`POSTGRES_PASSWORD` 和 `POSTGRES_DB`。
 - [ ] 执行 `uv run [[ project_slug ]] db upgrade`。
 - [ ] 执行 `uv run [[ project_slug ]] db current` 确认 revision。
-[% endif %][% if enable_redis or background_tasks == "taskiq" %]
+[% endif %][% if needs_redis %]
 
 ## Redis
 
 - [ ] 准备 Redis 8 instance，并限制公网访问。
 [% if enable_docker %]- [ ] 本地可执行 `docker compose --env-file deploy/.env -f deploy/compose.yaml up -d redis`。
-[% endif %][% if enable_redis %]- [ ] 配置 `REDIS_HOST`、`REDIS_PORT`、`REDIS_PASSWORD` 和 `REDIS_DB`。
+[% endif %][% if enable_redis or (enable_rate_limiting and rate_limit_storage == "redis") %]- [ ] 配置 `REDIS_HOST`、`REDIS_PORT`、`REDIS_PASSWORD` 和 `REDIS_DB`。
 [% endif %][% if background_tasks == "taskiq" %]- [ ] 配置 `TASKIQ_BROKER_URL`、`TASKIQ_RESULT_BACKEND_URL`、`TASKIQ_STREAM_NAME`、`TASKIQ_STREAM_MAXLEN` 与 `TASKIQ_STREAM_IDLE_TIMEOUT_MS`。
 - [ ] 按峰值入队速率和最长故障恢复窗口校准 Stream 容量，并监控 Stream 长度、pending 数量和最老 pending 时长。
 [% endif %][% endif %][% if ai_framework == "pydantic_ai" %]
@@ -46,7 +47,7 @@ cp .env.example .env
 
 ## 容器部署
 
-- [ ] 复制 `deploy/.env.prod.example` 为 `deploy/.env.prod`，填写全部生产必填值：`API_KEY`[% if database == "postgresql" %]、`POSTGRES_PASSWORD`[% endif %][% if enable_redis or background_tasks == "taskiq" %]、`REDIS_PASSWORD`[% endif %][% if ai_framework == "pydantic_ai" %]、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`[% endif %]；缺失时 Compose 解析直接失败。
+- [ ] 复制 `deploy/.env.prod.example` 为 `deploy/.env.prod`，填写全部生产必填值：`API_KEY`[% if database == "postgresql" %]、`POSTGRES_PASSWORD`[% endif %][% if needs_redis %]、`REDIS_PASSWORD`[% endif %][% if ai_framework == "pydantic_ai" %]、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`[% endif %]；缺失时 Compose 解析直接失败。
 - [ ] 确认 `deploy/.env.prod` 被 Git 忽略，且不进入镜像。
 - [ ] 执行 `docker compose --env-file deploy/.env.prod -f deploy/compose.prod.yaml config`。
 - [ ] 执行 `docker compose --env-file deploy/.env.prod -f deploy/compose.prod.yaml up -d --build`。

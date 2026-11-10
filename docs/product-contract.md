@@ -22,13 +22,13 @@
 |`background_tasks`|`taskiq` 或 `none`；默认 `none`|
 |`enable_redis`|是否生成 API 进程共享 Redis client；默认关闭|
 |`enable_caching`|是否生成 Redis cache；默认关闭，启用时要求 `enable_redis`|
+|`enable_docker`|默认启用；提问位置在 rate limiting 之前，供 `rate_limit_storage` 收窄可用选项|
+|`reverse_proxy`|Docker 启用时选择 `nginx_external` 或 `none`；默认 `nginx_external`|
 |`enable_rate_limiting`|是否生成 HTTP rate limiting；默认关闭|
 |`rate_limit_requests` / `rate_limit_period`|rate limiting 启用时出现；默认 `100` / `60`，且必须大于零|
-|`rate_limit_storage`|rate limiting 启用时选择 `memory` 或 `redis`；默认 `memory`，选择 Redis 时要求 `enable_redis`；同时启用 `enable_docker` 时只允许 `redis`（要求 `enable_redis`），`memory` 仅在非 Docker 生成中可用|
+|`rate_limit_storage`|rate limiting 启用时选择 `memory` 或 `redis`；默认值随 `enable_docker` 变为 `redis` 或 `memory`；`enable_docker` 启用时 `memory` 选项被禁用（生成镜像固定两个 Gunicorn worker，进程内计数会使配额成倍放大）|
 |`ai_framework`|`pydantic_ai` 或 `none`；默认 `pydantic_ai`|
 |`enable_logfire`|Pydantic AI 启用时出现；默认启用|
-|`enable_docker`|默认启用；与 `enable_rate_limiting` 同时启用时要求 `enable_redis` 且 `rate_limit_storage=redis`，不满足的组合在生成前被 validator 拒绝|
-|`reverse_proxy`|Docker 启用时选择 `nginx_external` 或 `none`；默认 `nginx_external`|
 |`ci_type`|`github` 或 `none`；默认 `github`|
 |`deployment_api_key`|所有调用方共享的部署级 secret；默认开发占位值 `change-me-in-production`|
 
@@ -43,7 +43,7 @@ Copier 的 `--defaults`、`--data` 和 `--data-file` 对同一答案必须得到
 - 部署级 API Key 和异步 lifespan；
 - 可选 PostgreSQL，启用时二选一使用 SQLAlchemy 或 SQLModel；
 - 可选 Item create/get/update/delete 示例，不提供 list endpoint；
-- 独立 Redis client、Redis cache、memory/Redis rate limiting；
+- 独立 Redis client、Redis cache、memory/Redis rate limiting；Redis rate limiting 自带 `REDIS_*` 配置与部署基础设施，不要求 `enable_redis`（后者只控制 API 进程共享 client）；
 - 使用独立 Redis Streams broker/result backend 生命周期的 Taskiq worker 与 scheduler；
 - 无请求间可变状态的单轮 Pydantic AI Agent；
 - 只 instrument Pydantic AI 且默认不采集模型内容的 Logfire；

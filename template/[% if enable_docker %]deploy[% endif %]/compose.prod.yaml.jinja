@@ -1,10 +1,11 @@
+[% set needs_redis = enable_redis or background_tasks == "taskiq" or (enable_rate_limiting and rate_limit_storage == "redis") -%]
 name: [[ project_slug ]]_prod
 
 # 生产必填环境变量校验：任一变量缺失或为空时，docker compose 解析即失败。
 x-required-env:
   API_KEY: "${API_KEY:?必须在 deploy/.env.prod 设置非空 API_KEY}"
 [% if database == "postgresql" %]  POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?必须在 deploy/.env.prod 设置非空 POSTGRES_PASSWORD}"
-[% endif %][% if enable_redis or background_tasks == "taskiq" %]  REDIS_PASSWORD: "${REDIS_PASSWORD:?必须在 deploy/.env.prod 设置非空 REDIS_PASSWORD}"
+[% endif %][% if needs_redis %]  REDIS_PASSWORD: "${REDIS_PASSWORD:?必须在 deploy/.env.prod 设置非空 REDIS_PASSWORD}"
 [% endif %][% if ai_framework == "pydantic_ai" %]  LLM_BASE_URL: "${LLM_BASE_URL:?必须在 deploy/.env.prod 设置非空 LLM_BASE_URL}"
   LLM_API_KEY: "${LLM_API_KEY:?必须在 deploy/.env.prod 设置非空 LLM_API_KEY}"
   LLM_MODEL: "${LLM_MODEL:?必须在 deploy/.env.prod 设置非空 LLM_MODEL}"
@@ -19,10 +20,10 @@ services:
       - .env.prod
     ports:
       - "${BACKEND_BIND_HOST:-127.0.0.1}:${BACKEND_PORT:-[[ backend_port ]]}:[[ backend_port ]]"
-[% if database == "postgresql" or enable_redis or background_tasks == "taskiq" %]    depends_on:
+[% if database == "postgresql" or needs_redis %]    depends_on:
 [% if database == "postgresql" %]      db:
         condition: service_healthy
-[% endif %][% if enable_redis or background_tasks == "taskiq" %]      redis:
+[% endif %][% if needs_redis %]      redis:
         condition: service_healthy
 [% endif %][% endif %]    networks:
       - backend
@@ -44,7 +45,7 @@ services:
       timeout: 5s
       retries: 5
     restart: always
-[% endif %][% if enable_redis or background_tasks == "taskiq" %]
+[% endif %][% if needs_redis %]
   redis:
     image: redis:7-alpine
     command:
@@ -106,8 +107,8 @@ services:
 networks:
   backend:
     driver: bridge
-[% if database == "postgresql" or enable_redis or background_tasks == "taskiq" %]
+[% if database == "postgresql" or needs_redis %]
 volumes:
 [% if database == "postgresql" %]  postgres_data:
-[% endif %][% if enable_redis or background_tasks == "taskiq" %]  redis_data:
+[% endif %][% if needs_redis %]  redis_data:
 [% endif %][% endif %]

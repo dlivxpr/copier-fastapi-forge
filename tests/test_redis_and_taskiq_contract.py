@@ -70,6 +70,25 @@ def test_redis_consumers_and_taskiq_have_independent_generation_boundaries(
     assert "storage_uri=settings.REDIS_URL" in redis_rate_limit.all_text()
     assert (redis_rate_limit.path / "app/clients/redis.py").is_file()
 
+    rate_limit_only = render_project(
+        tmp_path / "redis-rate-limit-only",
+        minimal_answers(
+            enable_redis=False,
+            enable_rate_limiting=True,
+            rate_limit_storage="redis",
+            enable_docker=True,
+            reverse_proxy="none",
+        ),
+    )
+    rate_limit_only_text = rate_limit_only.all_text()
+    assert "storage_uri=settings.REDIS_URL" in rate_limit_only_text
+    assert "REDIS_HOST" in rate_limit_only_text
+    assert "REDIS_PASSWORD" in rate_limit_only.read("deploy/compose.yaml")
+    assert "redis:" in rate_limit_only.read("deploy/compose.yaml")
+    assert not (rate_limit_only.path / "app/clients/redis.py").exists()
+    assert "RedisClient" not in rate_limit_only_text
+    assert "redis>=8.1.0" in rate_limit_only.read("pyproject.toml")
+
 
 @pytest.mark.service
 def test_redis_cache_and_rate_limit_pass_real_public_behavior(

@@ -119,6 +119,20 @@ enable_caching:
   default: false
   validator: "[% if enable_caching and not enable_redis %]Caching requires enable_redis[% endif %]"
 
+enable_docker:
+  type: bool
+  help: Generate Docker deployment assets
+  default: true
+
+reverse_proxy:
+  type: str
+  help: External reverse proxy configuration
+  choices:
+    External Nginx: nginx_external
+    No reverse proxy: none
+  default: nginx_external
+  when: "[[ enable_docker ]]"
+
 enable_rate_limiting:
   type: bool
   help: Enable HTTP rate limiting
@@ -142,11 +156,14 @@ rate_limit_storage:
   type: str
   help: Rate limit state storage
   choices:
-    Process memory: memory
-    Shared Redis: redis
-  default: memory
+    Process memory:
+      value: memory
+      # 生成镜像固定 Gunicorn --workers 2，进程内计数会让实际配额成倍放大
+      validator: "[% if enable_rate_limiting and enable_docker %]Docker images run 2 Gunicorn workers, so process-local counters multiply the quota; choose Shared Redis[% endif %]"
+    Shared Redis:
+      value: redis
+  default: "[% if enable_docker %]redis[% else %]memory[% endif %]"
   when: "[[ enable_rate_limiting ]]"
-  validator: "[% if rate_limit_storage == 'redis' and not enable_redis %]Redis rate limiting requires enable_redis[% endif %]"
 
 ai_framework:
   type: str
@@ -161,25 +178,6 @@ enable_logfire:
   help: Enable Logfire observability
   default: true
   when: "[[ ai_framework == 'pydantic_ai' ]]"
-
-enable_docker:
-  type: bool
-  help: Generate Docker deployment assets
-  default: true
-  validator: >-
-    [% if enable_docker and enable_rate_limiting and
-    (not enable_redis or rate_limit_storage != 'redis') %]
-    Docker deployments with rate limiting require enable_redis=true and rate_limit_storage=redis
-    [% endif %]
-
-reverse_proxy:
-  type: str
-  help: External reverse proxy configuration
-  choices:
-    External Nginx: nginx_external
-    No reverse proxy: none
-  default: nginx_external
-  when: "[[ enable_docker ]]"
 
 ci_type:
   type: str

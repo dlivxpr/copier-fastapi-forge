@@ -1,3 +1,4 @@
+[% set needs_redis = enable_redis or background_tasks == "taskiq" or (enable_rate_limiting and rate_limit_storage == "redis") -%]
 # [[ project_name ]]
 
 [[ project_description ]]
@@ -22,7 +23,7 @@
 - [uv](https://docs.astral.sh/uv/)
 [% if enable_docker %]- Docker 与 Docker Compose
 [% endif %][% if database == "postgresql" %]- PostgreSQL 17（本地服务或 compose `db`）
-[% endif %][% if enable_redis or background_tasks == "taskiq" %]- Redis 8（本地服务或 compose `redis`）
+[% endif %][% if needs_redis %]- Redis 8（本地服务或 compose `redis`）
 [% endif %]
 
 ## 本地快速开始
@@ -92,7 +93,7 @@ API lifespan 管理 Redis connection，`/health/ready` 会执行 `ping()`。
 
 ## Rate limiting
 
-默认限制由 `RATE_LIMIT_REQUESTS`、`RATE_LIMIT_PERIOD` 和 `RATE_LIMIT_STORAGE` 配置。业务 route 按成本使用 `rate_limit_low`、`rate_limit_medium` 或 `rate_limit_high` decorator。
+默认限制由 `RATE_LIMIT_REQUESTS`、`RATE_LIMIT_PERIOD` 和 `RATE_LIMIT_STORAGE` 配置。业务 route 按成本使用 `rate_limit_low`、`rate_limit_medium` 或 `rate_limit_high` decorator。[% if rate_limit_storage == "redis" %]`redis` 存储通过 `REDIS_HOST`、`REDIS_PORT`、`REDIS_PASSWORD` 和 `REDIS_DB` 连接共享 Redis，配额在多个 worker 间一致。[% if not enable_redis %]该连接独立于 API Redis client，仅 SlowAPI 使用。[% endif %][% endif %]
 [% endif %][% if background_tasks == "taskiq" %]
 
 ## Taskiq

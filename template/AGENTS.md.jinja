@@ -50,7 +50,7 @@ uv run pytest
 [% endif %]
 [% if enable_redis %]- Redis client 必须由 API lifespan `connect()`/`close()`；readiness 通过注入的 client 执行 `ping()`。
 [% endif %][% if enable_caching %]- FastAPICache 与 Redis client 共享 binary connection；shutdown 时调用 `FastAPICache.reset()`。
-[% endif %][% if enable_rate_limiting %]- Rate limiting 使用 [[ "Redis shared storage" if rate_limit_storage == "redis" else "process-local memory storage" ]]；业务 route 按成本选择 `rate_limit_low`、`rate_limit_medium` 或 `rate_limit_high`。
+[% endif %][% if enable_rate_limiting %]- Rate limiting 使用 [[ "Redis shared storage" if rate_limit_storage == "redis" else "process-local memory storage" ]][% if rate_limit_storage == "redis" and not enable_redis %]（独立于 API Redis client，SlowAPI 直接使用 `settings.REDIS_URL`）[% endif %]；业务 route 按成本选择 `rate_limit_low`、`rate_limit_medium` 或 `rate_limit_high`。
 [% endif %][% if background_tasks == "taskiq" %]- Taskiq 使用独立 Redis Streams broker/result backend，不复用 API Redis client 生命周期；Stream 名、近似容量和 pending idle timeout 分别由 `TASKIQ_STREAM_NAME`、`TASKIQ_STREAM_MAXLEN` 与 `TASKIQ_STREAM_IDLE_TIMEOUT_MS` 配置。
 - worker loss 的投递语义是容量边界内 at-least-once；业务 task 必须幂等。task exception 自动重试和 DLQ 不由 broker 默认提供。
 - 使用 `uv run [[ project_slug ]] taskiq worker` 和 `uv run [[ project_slug ]] taskiq scheduler` 启动进程；业务 task 在调用方模块中通过 `broker.task` 定义。

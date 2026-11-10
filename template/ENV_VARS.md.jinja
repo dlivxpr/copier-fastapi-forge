@@ -1,3 +1,4 @@
+[% set needs_redis = enable_redis or background_tasks == "taskiq" or (enable_rate_limiting and rate_limit_storage == "redis") -%]
 # 环境变量
 
 `app/core/config.py` 是运行时配置的事实来源；`.env.example` 提供当前能力组合的完整变量清单。复制为 `.env` 后再写入本地值，不要提交 `.env`。[% if enable_docker %]根 `.env` 只服务非 Docker 运行；Docker 编排改用 `deploy/.env`（开发）与 `deploy/.env.prod`（生产），见文末「Docker 编排」。[% endif %]
@@ -27,7 +28,7 @@
 | `DB_POOL_TIMEOUT` | `[[ db_pool_timeout ]]` | 获取 connection 的超时秒数 |
 
 应用根据上述字段构造 `DATABASE_URL`；compose 内部使用 service 名 `db`。[% if enable_docker %]`DB_POOL_*` 按每个 API worker 计：Docker API 固定 2 个 worker，当前生成值下整个 API 最多 [[ (db_pool_size + db_max_overflow) * 2 ]] 个数据库连接。[% endif %]
-[% endif %][% if enable_redis %]
+[% endif %][% if enable_redis or (enable_rate_limiting and rate_limit_storage == "redis") %]
 
 ## Redis
 
@@ -36,9 +37,9 @@
 | `REDIS_HOST` | `localhost` | Redis 主机 |
 | `REDIS_PORT` | `6379` | Redis 端口 |
 | `REDIS_PASSWORD` | 空 | Redis 密码 |
-| `REDIS_DB` | `0` | API Redis database |
+| `REDIS_DB` | `0` | [% if enable_redis %]API Redis database[% else %]SlowAPI rate limit storage database[% endif %] |
 
-密码建议使用 URL-safe 随机 hex，服务端与客户端必须一致；密码写入 URL 时特殊字符需百分号编码。
+密码建议使用 URL-safe 随机 hex，服务端与客户端必须一致；密码写入 URL 时特殊字符需百分号编码。[% if not enable_redis %]该组合不生成 API Redis client，上述变量只供 SlowAPI 使用。[% endif %]
 [% endif %][% if background_tasks == "taskiq" %]
 
 ## Taskiq
@@ -89,10 +90,10 @@ Docker 编排不读取根 `.env`。`deploy/.env.example`（开发）与 `deploy/
 |---|---|---|
 | `BACKEND_BIND_HOST` | `127.0.0.1` | 宿主 API 绑定地址；仅远程压测时设为 `0.0.0.0`，并配合防火墙限制来源 |
 | `BACKEND_PORT` | `[[ backend_port ]]` | 宿主 API 端口；两套编排同时运行时必须错开 |[% if database == "postgresql" %]
-| `POSTGRES_PUBLISHED_PORT` | `5432` | 仅开发编排发布到宿主的 PostgreSQL 端口 |[% endif %][% if enable_redis or background_tasks == "taskiq" %]
+| `POSTGRES_PUBLISHED_PORT` | `5432` | 仅开发编排发布到宿主的 PostgreSQL 端口 |[% endif %][% if needs_redis %]
 | `REDIS_PUBLISHED_PORT` | `6379` | 仅开发编排发布到宿主的 Redis 端口 |[% endif %]
 
-开发编排把全部宿主端口绑定到 `127.0.0.1`，`ENVIRONMENT=local`、`DEBUG=true`；生产编排除 API 外不发布任何宿主端口，`ENVIRONMENT=production`、`DEBUG=false`。应用容器通过各自 service 的 `env_file` 接收全部应用配置，基础设施容器只接收自身凭据白名单，不注入整份业务 env。生产缺失必填值时 Compose 在解析阶段直接失败：`API_KEY`[% if database == "postgresql" %]、`POSTGRES_PASSWORD`[% endif %][% if enable_redis or background_tasks == "taskiq" %]、`REDIS_PASSWORD`[% endif %][% if ai_framework == "pydantic_ai" %]、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`[% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]；`LOGFIRE_TOKEN` 可选[% endif %]。
+开发编排把全部宿主端口绑定到 `127.0.0.1`，`ENVIRONMENT=local`、`DEBUG=true`；生产编排除 API 外不发布任何宿主端口，`ENVIRONMENT=production`、`DEBUG=false`。应用容器通过各自 service 的 `env_file` 接收全部应用配置，基础设施容器只接收自身凭据白名单，不注入整份业务 env。生产缺失必填值时 Compose 在解析阶段直接失败：`API_KEY`[% if database == "postgresql" %]、`POSTGRES_PASSWORD`[% endif %][% if needs_redis %]、`REDIS_PASSWORD`[% endif %][% if ai_framework == "pydantic_ai" %]、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`[% endif %][% if ai_framework == "pydantic_ai" and enable_logfire %]；`LOGFIRE_TOKEN` 可选[% endif %]。
 [% endif %]
 
 ## 验证

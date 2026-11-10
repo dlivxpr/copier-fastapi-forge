@@ -267,7 +267,7 @@ PROFILE_STATES: dict[str, dict[str, object]] = {
         "orm_type": "sqlmodel",
         "include_example_crud": True,
         "background_tasks": "none",
-        "enable_redis": True,
+        "enable_redis": False,
         "enable_caching": False,
         "enable_rate_limiting": True,
         "rate_limit_storage": "redis",
@@ -298,11 +298,7 @@ def is_valid_state(state: dict[str, object]) -> bool:
     if state["enable_caching"] and not state["enable_redis"]:
         return False
     if (not state["enable_rate_limiting"] and state["rate_limit_storage"] != INACTIVE) or (
-        state["enable_rate_limiting"]
-        and (
-            state["rate_limit_storage"] == INACTIVE
-            or (state["rate_limit_storage"] == "redis" and not state["enable_redis"])
-        )
+        state["enable_rate_limiting"] and state["rate_limit_storage"] == INACTIVE
     ):
         return False
     if (
