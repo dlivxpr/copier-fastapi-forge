@@ -1,6 +1,12 @@
 [% set needs_redis = enable_redis or background_tasks == "taskiq" or (enable_rate_limiting and rate_limit_storage == "redis") -%]
 name: [[ project_slug ]]_dev
 
+# 所有服务统一使用 json-file 日志驱动并限制单容器日志上限，避免长跑后占满宿主磁盘。
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "100M"
+
 services:
   app:
     build:
@@ -22,6 +28,7 @@ services:
         condition: service_healthy
 [% endif %][% endif %]    networks:
       - backend
+    logging: *default-logging
     restart: unless-stopped
 [% if database == "postgresql" %]
   db:
@@ -41,6 +48,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    logging: *default-logging
     restart: unless-stopped
 [% endif %][% if needs_redis %]
   redis:
@@ -67,6 +75,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    logging: *default-logging
     restart: unless-stopped
 [% endif %][% if background_tasks == "taskiq" %]
   worker:
@@ -87,6 +96,7 @@ services:
         condition: service_healthy
 [% endif %]    networks:
       - backend
+    logging: *default-logging
     restart: unless-stopped
 
   scheduler:
@@ -107,6 +117,7 @@ services:
         condition: service_healthy
 [% endif %]    networks:
       - backend
+    logging: *default-logging
     restart: unless-stopped
 [% endif %]
 networks:

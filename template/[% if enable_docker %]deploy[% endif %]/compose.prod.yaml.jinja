@@ -10,6 +10,12 @@ x-required-env:
   LLM_API_KEY: "${LLM_API_KEY:?必须在 deploy/.env.prod 设置非空 LLM_API_KEY}"
   LLM_MODEL: "${LLM_MODEL:?必须在 deploy/.env.prod 设置非空 LLM_MODEL}"
 [% endif %]
+# 所有服务统一使用 json-file 日志驱动并限制单容器日志上限，避免长跑后占满宿主磁盘。
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "100M"
+
 services:
   app:
     build:
@@ -27,6 +33,7 @@ services:
         condition: service_healthy
 [% endif %][% endif %]    networks:
       - backend
+    logging: *default-logging
     restart: always
 [% if database == "postgresql" %]
   db:
@@ -44,6 +51,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    logging: *default-logging
     restart: always
 [% endif %][% if needs_redis %]
   redis:
@@ -68,6 +76,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    logging: *default-logging
     restart: always
 [% endif %][% if background_tasks == "taskiq" %]
   worker:
@@ -85,6 +94,7 @@ services:
         condition: service_healthy
 [% endif %]    networks:
       - backend
+    logging: *default-logging
     restart: always
 
   scheduler:
@@ -102,6 +112,7 @@ services:
         condition: service_healthy
 [% endif %]    networks:
       - backend
+    logging: *default-logging
     restart: always
 [% endif %]
 networks:

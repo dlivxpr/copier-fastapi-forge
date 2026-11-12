@@ -59,7 +59,7 @@ docker compose --env-file deploy/.env -f deploy/compose.yaml config
 docker compose --env-file deploy/.env -f deploy/compose.yaml up --build
 ```
 
-镜像使用 multi-stage build、非 root 用户和 `HEALTHCHECK`；API 容器以 Gunicorn 固定运行 2 个 Uvicorn worker。两套编排使用独立 project name（`[[ project_slug ]]_dev` / `[[ project_slug ]]_prod`），容器、网络与卷互不共享。关闭 Docker 选项时，整个 `deploy/` 目录与本节不会生成。
+镜像使用 multi-stage build、非 root 用户和 `HEALTHCHECK`；API 容器以 Gunicorn 固定运行 2 个 Uvicorn worker。两套编排的每个 service 都通过 `x-logging` 锚点显式使用 `json-file` 驱动并设置 `max-size: 100M`，单个容器日志文件不会无限增长；需要保留多份轮转文件或压缩时，在该锚点补充 `max-file` 等选项。两套编排使用独立 project name（`[[ project_slug ]]_dev` / `[[ project_slug ]]_prod`），容器、网络与卷互不共享。关闭 Docker 选项时，整个 `deploy/` 目录与本节不会生成。
 [% if reverse_proxy == "nginx_external" %]
 
 `deploy/nginx.conf` 是外部 Nginx 配置，不作为 compose service。Nginx 容器须加入 `[[ project_slug ]]_prod_backend` 网络，upstream 通过 service 名 `app` 访问 backend，不依赖 `host.docker.internal`；挂载 TLS 证书等完整步骤见 `MANUAL_STEPS.md` 的容器部署清单。

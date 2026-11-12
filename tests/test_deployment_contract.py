@@ -67,6 +67,10 @@ def _docker(*command: str, timeout: int = 180) -> subprocess.CompletedProcess[st
     )
 
 
+def _expected_logging() -> dict[str, Any]:
+    return {"driver": "json-file", "options": {"max-size": "100M"}}
+
+
 def _published_port(container_id: str, container_port: int) -> int:
     result = _docker("port", container_id, f"{container_port}/tcp", timeout=30)
     assert result.returncode == 0, result.stderr
@@ -142,6 +146,7 @@ def test_docker_compose_and_capability_conditions_are_public_contract(tmp_path: 
         port = compose["services"]["app"]["ports"][0]
         assert port["target"] == 8123
         assert port["host_ip"] == "127.0.0.1"
+        assert compose["services"]["app"]["logging"] == _expected_logging()
 
     retained = render_project(
         tmp_path / "retained",
@@ -161,6 +166,8 @@ def test_docker_compose_and_capability_conditions_are_public_contract(tmp_path: 
         _write_deployment_environment(retained, filename)
         services = _compose_config(retained, filename)["services"]
         assert set(services) == {"app", "db", "redis", "worker", "scheduler"}
+        for service_name, service in services.items():
+            assert service["logging"] == _expected_logging(), service_name
         assert services["app"]["depends_on"]["db"]["condition"] == "service_healthy"
         assert services["app"]["depends_on"]["redis"]["condition"] == "service_healthy"
         for service_name in ("app", "worker", "scheduler"):
